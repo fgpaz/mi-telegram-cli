@@ -1,0 +1,8 @@
+project: mi-telegram-cli
+vault: teslita
+default_env: dev
+infisical_project_id: 4896c627-7a91-4d18-9527-5acab9d978cb
+sops:
+  age_recipients:
+    - age1dqg4eyvkxcrcsk576gq70qfawmaj5r08hh2nlkvgrwegywlpuf9sp8sv22
+  encrypted_file: infra/secrets.enc.env

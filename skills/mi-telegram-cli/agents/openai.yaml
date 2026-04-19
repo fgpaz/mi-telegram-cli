@@ -1,0 +1,4 @@
+interface:
+  display_name: "mi-telegram-cli"
+  short_description: "Headless Telegram QA via local CLI"
+  default_prompt: "Use $mi-telegram-cli to run local Telegram QA through the mi-telegram-cli binary and isolated profiles."

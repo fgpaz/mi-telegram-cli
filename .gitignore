@@ -1,0 +1,6 @@
+infra/.env
+.playwright-mcp/
+tmp_test.txt
+*.exe
+/bin/mi-telegram-cli
+/bin/mi-telegram-cli-amd64.exe

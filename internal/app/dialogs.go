@@ -70,6 +70,9 @@ func (e *Executor) handleDialogs(ctx context.Context, args []string) (output.Res
 		if *profileID == "" || strings.TrimSpace(*peerQuery) == "" {
 			return e.errorResponse(*profileID, "InvalidInput", "profile and peer are required"), *jsonMode
 		}
+		if e.isProtectedProfileForAutomation(*profileID) {
+			return e.profileProtectedResponse(*profileID), *jsonMode
+		}
 
 		return e.withProfileLock(*profileID, *jsonMode, func() output.Response {
 			runtimeConfig, err := e.requireTelegramConfig()

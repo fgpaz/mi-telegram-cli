@@ -16,4 +16,5 @@
 | `RF-MSG-003` | `TP-MSG` | `TP-MSG-007..009,022` |
 | `RF-MSG-004` | `TP-MSG` | `TP-MSG-011..013` |
 | `RF-MSG-005` | `TP-MSG` | `TP-MSG-023..030` |
+| `RF-MSG-006` | `TP-MSG` | `TP-MSG-032..040` |
 | `RF-SKL-001` | `TP-SKL` | `TP-SKL-001..012` |

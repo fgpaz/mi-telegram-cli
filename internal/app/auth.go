@@ -33,6 +33,9 @@ func (e *Executor) handleAuth(ctx context.Context, args []string) (output.Respon
 		if *profileID == "" {
 			return e.errorResponse(*profileID, "InvalidInput", "profile is required"), *jsonMode
 		}
+		if e.isProtectedProfileForAutomation(*profileID) {
+			return e.profileProtectedResponse(*profileID), *jsonMode
+		}
 
 		method, err := e.resolveLoginMethod(flagProvided(fs, "method"), *methodRaw, *phone, *code, *password, *jsonMode)
 		if err != nil {
@@ -109,6 +112,9 @@ func (e *Executor) handleAuth(ctx context.Context, args []string) (output.Respon
 		}
 		if *profileID == "" {
 			return e.errorResponse("", "InvalidInput", "profile is required"), *jsonMode
+		}
+		if e.isProtectedProfileForAutomation(*profileID) {
+			return e.profileProtectedResponse(*profileID), *jsonMode
 		}
 
 		return e.withProfileLock(*profileID, *jsonMode, func() output.Response {

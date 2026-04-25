@@ -2,14 +2,42 @@ package app
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
+	"io"
+	"io/fs"
+	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
 	"mi-telegram-cli/internal/output"
 	"mi-telegram-cli/internal/tg"
 )
+
+const maxPhotoBytes = 10 * 1024 * 1024
+
+var supportedPhotoMIMETypes = map[string]string{
+	".jpg":  "image/jpeg",
+	".jpeg": "image/jpeg",
+	".png":  "image/png",
+	".webp": "image/webp",
+}
+
+type localImageInfo struct {
+	SizeBytes int64
+	MIMEType  string
+	SHA256    string
+}
+
+type localPhotoError struct {
+	Code    string
+	Message string
+}
+
+func (e *localPhotoError) Error() string { return e.Message }
 
 func (e *Executor) handleMessages(ctx context.Context, args []string) (output.Response, bool) {
 	if len(args) == 0 {
@@ -45,8 +73,33 @@ func (e *Executor) handleMessages(ctx context.Context, args []string) (output.Re
 		if *profileID == "" || trimmedPeerQuery == "" || trimmedText == "" {
 			return e.errorResponse(*profileID, "InvalidInput", "profile, peer and text are required"), *jsonMode
 		}
+		if e.isProtectedProfileForAutomation(*profileID) {
+			return e.profileProtectedResponse(*profileID), *jsonMode
+		}
 		e.maybeWarnMSYSPathTranslation(trimmedText, *jsonMode)
 		return e.executeSend(ctx, *profileID, trimmedPeerQuery, trimmedText, *jsonMode)
+	case "send-photo":
+		fs := newFlagSet("messages send-photo")
+		profileID := fs.String("profile", "", "")
+		peerQuery := fs.String("peer", "", "")
+		filePath := fs.String("file", "", "")
+		caption := fs.String("caption", "", "")
+		jsonMode := fs.Bool("json", false, "")
+		if err := fs.Parse(args[1:]); err != nil {
+			return e.errorResponse("", "InvalidInput", err.Error()), true
+		}
+		trimmedPeerQuery := strings.TrimSpace(*peerQuery)
+		trimmedFilePath := strings.TrimSpace(*filePath)
+		if *profileID == "" || trimmedPeerQuery == "" || trimmedFilePath == "" {
+			return e.errorResponse(*profileID, "InvalidInput", "profile, peer and file are required"), *jsonMode
+		}
+		if len(*caption) > 1024 {
+			return e.errorResponse(*profileID, "InvalidInput", "caption exceeds 1024 character Telegram limit"), *jsonMode
+		}
+		if e.isProtectedProfileForAutomation(*profileID) {
+			return e.profileProtectedResponse(*profileID), *jsonMode
+		}
+		return e.executeSendPhoto(ctx, *profileID, trimmedPeerQuery, trimmedFilePath, *caption, *jsonMode)
 	case "wait":
 		fs := newFlagSet("messages wait")
 		profileID := fs.String("profile", "", "")
@@ -77,6 +130,9 @@ func (e *Executor) handleMessages(ctx context.Context, args []string) (output.Re
 		trimmedButtonText := strings.TrimSpace(*buttonText)
 		if *profileID == "" || strings.TrimSpace(*peerQuery) == "" || *messageID < 1 || (!hasButtonIndex && trimmedButtonText == "") || (hasButtonIndex && *buttonIndex < 0) {
 			return e.errorResponse(*profileID, "InvalidInput", "invalid profile, peer, message-id or button selector"), *jsonMode
+		}
+		if e.isProtectedProfileForAutomation(*profileID) {
+			return e.profileProtectedResponse(*profileID), *jsonMode
 		}
 
 		return e.executePressButton(ctx, *profileID, *peerQuery, *messageID, *buttonIndex, hasButtonIndex, trimmedButtonText, *jsonMode)
@@ -164,6 +220,129 @@ func (e *Executor) executeSend(ctx context.Context, profileID, peerQuery, text s
 			},
 		}
 	})
+}
+
+func (e *Executor) executeSendPhoto(ctx context.Context, profileID, peerQuery, filePath, caption string, jsonMode bool) (output.Response, bool) {
+	info, photoErr := validateLocalImage(filePath)
+	if photoErr != nil {
+		return e.errorResponse(profileID, photoErr.Code, photoErr.Message), jsonMode
+	}
+
+	return e.withProfileLock(profileID, jsonMode, func() output.Response {
+		runtimeConfig, err := e.requireTelegramConfig()
+		if err != nil {
+			return e.errorResponse(profileID, "InvalidInput", err.Error())
+		}
+
+		sessionRef, err := e.authorizedSession(profileID)
+		if err != nil {
+			if errors.Is(err, errUnauthorizedProfile) {
+				return e.errorResponse(profileID, "UnauthorizedProfile", "profile is not authorized")
+			}
+			return e.mapStoreError(profileID, err)
+		}
+
+		peer, resp, ok := e.resolvePeer(ctx, profileID, runtimeConfig, sessionRef, peerQuery)
+		if !ok {
+			return resp
+		}
+
+		result, err := e.telegram.SendPhoto(ctx, runtimeConfig, sessionRef, tg.SendPhotoRequest{
+			Peer:     peer,
+			FilePath: filePath,
+			Caption:  caption,
+		})
+		if err != nil {
+			return e.mapTelegramUnauthorizedOr(profileID, "TelegramSendPhotoFailed", err)
+		}
+
+		media := map[string]any{
+			"kind":      "photo",
+			"mimeType":  info.MIMEType,
+			"sizeBytes": info.SizeBytes,
+			"sha256":    info.SHA256,
+		}
+		if caption != "" {
+			media["caption"] = caption
+		}
+
+		return output.Response{
+			OK:      true,
+			Profile: profileID,
+			Data: map[string]any{
+				"peer":      peer,
+				"messageId": result.MessageID,
+				"sentAtUtc": result.SentAtUTC,
+				"media":     media,
+			},
+		}
+	})
+}
+
+func validateLocalImage(filePath string) (localImageInfo, *localPhotoError) {
+	ext := strings.ToLower(filepath.Ext(filePath))
+	mimeType, ok := supportedPhotoMIMETypes[ext]
+	if !ok {
+		return localImageInfo{}, &localPhotoError{
+			Code:    "UnsupportedMediaType",
+			Message: "supported types: jpg, jpeg, png, webp",
+		}
+	}
+
+	stat, err := os.Stat(filePath)
+	if err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			return localImageInfo{}, &localPhotoError{
+				Code:    "FileNotFound",
+				Message: "photo file not found",
+			}
+		}
+		return localImageInfo{}, &localPhotoError{
+			Code:    "InvalidInput",
+			Message: fmt.Sprintf("failed to stat photo file: %v", err),
+		}
+	}
+	if stat.IsDir() {
+		return localImageInfo{}, &localPhotoError{
+			Code:    "InvalidInput",
+			Message: "photo path is a directory",
+		}
+	}
+	if stat.Size() == 0 {
+		return localImageInfo{}, &localPhotoError{
+			Code:    "InvalidInput",
+			Message: "photo file is empty",
+		}
+	}
+	if stat.Size() > maxPhotoBytes {
+		return localImageInfo{}, &localPhotoError{
+			Code:    "InvalidInput",
+			Message: "photo exceeds 10MiB Telegram photo limit",
+		}
+	}
+
+	file, err := os.Open(filePath)
+	if err != nil {
+		return localImageInfo{}, &localPhotoError{
+			Code:    "InvalidInput",
+			Message: fmt.Sprintf("failed to open photo: %v", err),
+		}
+	}
+	defer file.Close()
+
+	hasher := sha256.New()
+	if _, err := io.Copy(hasher, file); err != nil {
+		return localImageInfo{}, &localPhotoError{
+			Code:    "InvalidInput",
+			Message: fmt.Sprintf("failed to hash photo: %v", err),
+		}
+	}
+
+	return localImageInfo{
+		SizeBytes: stat.Size(),
+		MIMEType:  mimeType,
+		SHA256:    hex.EncodeToString(hasher.Sum(nil)),
+	}, nil
 }
 
 func (e *Executor) maybeWarnMSYSPathTranslation(text string, jsonMode bool) {

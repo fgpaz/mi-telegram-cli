@@ -16,6 +16,7 @@
 | `dialogs mark-read` | `--profile`, `--peer` | confirmación |
 | `messages read` | `--profile`, `--peer`, `--limit`, `--after-id` | mensajes recientes enriquecidos |
 | `messages send` | `--profile`, `--peer`, `--text` | mensaje enviado |
+| `messages send-photo` | `--profile`, `--peer`, `--file`, `--caption` opcional | foto enviada con metadata derivada (`media{kind,mimeType,sizeBytes,sha256,caption?}`) |
 | `messages wait` | `--profile`, `--peer`, `--after-id`, `--timeout` | reply enriquecido observado o timeout |
 | `messages press-button` | `--profile`, `--peer`, `--message-id`, `--button-index` o `--button-text` | callback ejecutado o URL informada |
 
@@ -27,6 +28,8 @@
 - `--message-id`: identificador público del mensaje que contiene el botón inline.
 - `--button-index`: selector canónico 0-based del botón inline.
 - `--button-text`: selector alternativo por label exacto del botón inline.
+- `--file`: path local absoluto o relativo del archivo a subir en `messages send-photo`. Tipos soportados: `jpg`, `jpeg`, `png`, `webp`. Tamaño máximo: 10 MiB.
+- `--caption`: texto opcional adjunto a la foto en `messages send-photo`; máximo 1024 caracteres; sin parse mode.
 - `--method`: selector de login visible para `auth login`; valores `code` o `qr`.
 - `--timeout`: timeout total visible para `auth login --method qr` y `messages wait`.
 - Si `auth login` se ejecuta sin `--method` en una terminal interactiva, el CLI solicita `QR` o `Phone + code`; fuera de TTY usa `code`.
@@ -59,6 +62,10 @@
 | `TelegramListDialogsFailed` | Falla listando diálogos |
 | `TelegramReadFailed` | Falla leyendo mensajes |
 | `TelegramSendFailed` | Fallo enviando mensaje |
+| `TelegramSendPhotoFailed` | Fallo subiendo o enviando la foto via `messages.sendMedia` |
+| `FileNotFound` | El path local de `--file` no existe |
+| `UnsupportedMediaType` | La extensión del archivo no está en `{jpg,jpeg,png,webp}` |
+| `ProfileProtected` | `--profile qa-alt` bloqueado para automatización por el guard cross-cutting |
 | `TelegramWaitFailed` | Falla esperando updates del peer |
 | `MessageNotFound` | Mensaje objetivo inexistente |
 | `ButtonNotFound` | Botón no encontrado |
@@ -79,6 +86,7 @@ Mapeo conceptual con el MCP previo:
 - `tg_dialogs` -> `dialogs list --json`
 - `tg_dialog` / `tg_read` -> `messages read --json`
 - `tg_send` -> `messages send --json`
+- `tg_send_photo` -> `messages send-photo --json`
 - `tg_wait` -> `messages wait --json`
 - `tg_press_button` -> `messages press-button --json`
 
@@ -92,4 +100,6 @@ Notas operativas de shell:
 - `messages press-button` prioriza `--button-index` si también llega `--button-text`.
 - Los botones URL devuelven `action=url` y la URL visible, pero el CLI no abre navegador ni WebView.
 - `ProfileLocked` puede aparecer incluso en `auth status`, `me`, `dialogs list` o `messages read` si otra invocación ya abrió el mismo perfil; la compatibilidad para skills exige una sola secuencia activa por perfil.
+- `messages send-photo` valida el archivo local **antes** de tocar Telegram (existencia, no directorio, tamaño 1..10485760 bytes, extensión soportada) y nunca expone el `filePath` original en `data` ni en mensajes de error. La metadata observable es `data.media{kind,mimeType,sizeBytes,sha256,caption?}`.
+- Guard cross-cutting `qa-alt`: el perfil `qa-alt` es estado de usuario real protegido. Los subcomandos modificadores (`auth login`, `auth logout`, `dialogs mark-read`, `messages send`, `messages send-photo`, `messages press-button`) responden `ProfileProtected` cuando reciben `--profile qa-alt`. Las lecturas (`auth status`, `me`, `dialogs list`, `messages read`, `messages wait`) siguen permitidas para inspección humana.
 - Si `auth login --method qr` o el flujo por código requiere interacción visible del operador, el patrón compatible es delegar un comando local `pwsh -File ...` o `mi-telegram-cli auth login ...`.

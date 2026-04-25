@@ -45,6 +45,12 @@ type Executor struct {
 
 var errUnauthorizedProfile = errors.New("unauthorized profile")
 
+var protectedAutomationProfiles = map[string]bool{
+	"qa-alt": true,
+}
+
+const profileProtectedMessage = "qa-alt is protected real-user state; use qa-dev for automation"
+
 func NewExecutor(cfg Config) *Executor {
 	now := cfg.Now
 	if now == nil {
@@ -195,6 +201,14 @@ func (e *Executor) resolvePeer(ctx context.Context, profileID string, runtimeCon
 	default:
 		return tg.Peer{}, e.errorResponse(profileID, "TelegramListDialogsFailed", err.Error()), false
 	}
+}
+
+func (e *Executor) isProtectedProfileForAutomation(profileID string) bool {
+	return protectedAutomationProfiles[strings.TrimSpace(profileID)]
+}
+
+func (e *Executor) profileProtectedResponse(profileID string) output.Response {
+	return e.errorResponse(profileID, "ProfileProtected", profileProtectedMessage)
 }
 
 func (e *Executor) withProfileLock(profileID string, jsonMode bool, fn func() output.Response) (output.Response, bool) {

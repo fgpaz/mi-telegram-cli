@@ -97,6 +97,7 @@ func printUsage(w io.Writer) {
 	_, _ = fmt.Fprintln(w, "  dialogs mark-read --profile <id> --peer <query>")
 	_, _ = fmt.Fprintln(w, "  messages read --profile <id> --peer <query> [--limit <1..100>] [--after-id <id>]")
 	_, _ = fmt.Fprintln(w, "  messages send --profile <id> --peer <query> --text <value>")
+	_, _ = fmt.Fprintln(w, "  messages send-photo --profile <id> --peer <query> --file <path> [--caption <value>]")
 	_, _ = fmt.Fprintln(w, "  messages wait --profile <id> --peer <query> [--after-id <id>] --timeout <1..300>")
 	_, _ = fmt.Fprintln(w, "  messages press-button --profile <id> --peer <query> --message-id <id> (--button-index <n> | --button-text <value>)")
 	_, _ = fmt.Fprintln(w, "")

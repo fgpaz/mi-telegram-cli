@@ -83,6 +83,8 @@ sequenceDiagram
 - `messages wait` observa mensajes recientes del peer dentro del proceso de esa invocación y no introduce listeners persistentes ni background workers.
 - `messages read` y `messages wait` exponen un `MensajeResumen` enriquecido con metadata de adjuntos y botones inline, sin descargar archivos.
 - `messages press-button` opera sobre un `messageId` exacto y un selector de botón explícito; ejecuta callbacks reales y puede informar URLs visibles sin abrir UI externa.
+- `messages send-photo` sube UNA foto local validada antes de tocar Telegram (existencia, extension `{jpg,jpeg,png,webp}`, cap 10 MiB) y devuelve metadata derivada (`media{kind,mimeType,sizeBytes,sha256,caption?}`) sin exponer el `filePath` local.
+- El perfil `qa-alt` es estado de usuario real protegido: el guard cross-cutting rechaza con `ProfileProtected` cualquier subcomando modificador (`auth login`, `auth logout`, `dialogs mark-read`, `messages send`, `messages send-photo`, `messages press-button`) y permite los read-only para inspección humana.
 - La sesión MTProto es derivada física y no redefine el modelo semántico.
 
 ## 8. Insumos para FL
@@ -101,6 +103,7 @@ sequenceDiagram
 | `FL-MSG-03` | Esperar reply enriquecido para smoke E2E | Agente, Telegram, Bot objetivo | CLI, Adaptador Telegram |
 | `FL-MSG-04` | Marcar dialogo como leido | Agente, Telegram | CLI, Adaptador Telegram |
 | `FL-MSG-05` | Presionar boton inline de un mensaje | Agente, Telegram, Bot objetivo | CLI, Adaptador Telegram |
+| `FL-MSG-06` | Enviar foto a peer | Agente, Telegram, Bot objetivo | CLI, Adaptador Telegram |
 | `FL-SKL-01` | Ejecutar smoke desde skill | Agente, Bot objetivo | Skill, CLI |
 
 ### Estados, eventos y ownership

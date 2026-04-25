@@ -9,7 +9,10 @@ param(
     [switch]$SkipPull,
     [switch]$SkipBuild,
     [switch]$SkipAuthCheck,
-    [switch]$MarkRead
+    [switch]$MarkRead,
+    [switch]$IncludePhoto,
+    [string]$PhotoFile,
+    [string]$PhotoCaption
 )
 
 Set-StrictMode -Version Latest
@@ -53,10 +56,31 @@ if ($MarkRead) {
     $markRead.Json | ConvertTo-Json -Depth 20
 }
 
+$photoMessageId = $null
+$photoSha256 = $null
+if ($IncludePhoto) {
+    if ([string]::IsNullOrWhiteSpace($PhotoFile)) {
+        throw "-PhotoFile is required when -IncludePhoto is set."
+    }
+    $resolvedPhoto = (Resolve-Path -LiteralPath $PhotoFile).Path
+
+    Write-Step "messages send-photo"
+    $photoArgs = @("messages", "send-photo", "--profile", $Profile, "--peer", $Peer, "--file", $resolvedPhoto, "--json")
+    if (-not [string]::IsNullOrWhiteSpace($PhotoCaption)) {
+        $photoArgs += @("--caption", $PhotoCaption)
+    }
+    $photo = Invoke-MiTelegramCliJson -CommandArgs $photoArgs -ProfileLockRetries 3
+    $photo.Json | ConvertTo-Json -Depth 20
+    $photoMessageId = [int64]$photo.Json.data.messageId
+    $photoSha256 = [string]$photo.Json.data.media.sha256
+}
+
 Write-Step "summary"
 [pscustomobject]@{
-    profile   = $Profile
-    peer      = $Peer
-    sentText  = $messageText
-    messageId = $messageId
+    profile        = $Profile
+    peer           = $Peer
+    sentText       = $messageText
+    messageId      = $messageId
+    photoMessageId = $photoMessageId
+    photoSha256    = $photoSha256
 } | ConvertTo-Json -Depth 10

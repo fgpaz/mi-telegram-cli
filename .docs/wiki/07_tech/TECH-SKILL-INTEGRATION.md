@@ -8,7 +8,9 @@ La integración debe funcionar tanto desde el repo fuente como desde repos consu
 ## 2. Contrato operativo
 
 - Cada comando automatizable debe aceptar `--json`.
-- La skill puede encadenar `auth status`, `dialogs list`, `messages read`, `messages send`, `messages wait` y `messages press-button`.
+- La skill puede encadenar `auth status`, `dialogs list`, `messages read`, `messages send`, `messages send-photo`, `messages wait` y `messages press-button`.
+- `messages send-photo` recibe `--file <path>` (local) y `--caption <text>` opcional; la skill jamas debe asumir que el `filePath` queda accesible en `data.media`, solo `mimeType`, `sizeBytes`, `sha256` y `caption?`.
+- La skill respeta el guard `ProfileProtected`: nunca invoca subcomandos modificadores (`auth login`, `auth logout`, `dialogs mark-read`, `messages send`, `messages send-photo`, `messages press-button`) con `--profile qa-alt`; las lecturas humanas sobre `qa-alt` siguen permitidas.
 - El smoke E2E canónico usa una cuenta dedicada y un peer objetivo resoluble.
 - Cuando el bot devuelve botones inline, la skill debe inspeccionar `buttons[]` y preferir `button-index` para accionar un botón específico.
 - La lectura de mensajes puede exponer `attachments[]` y `buttons[]`; esa metadata es contractual y no requiere descargar adjuntos.

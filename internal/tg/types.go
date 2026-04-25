@@ -178,6 +178,12 @@ type SendMessageRequest struct {
 	Text string
 }
 
+type SendPhotoRequest struct {
+	Peer     Peer
+	FilePath string
+	Caption  string
+}
+
 type WaitMessageRequest struct {
 	Peer    Peer
 	AfterID int64
@@ -203,6 +209,7 @@ type Client interface {
 	ResolvePeer(context.Context, RuntimeConfig, SessionRef, ResolvePeerRequest) (Peer, error)
 	ReadMessages(context.Context, RuntimeConfig, SessionRef, ReadMessagesRequest) ([]MessageSummary, error)
 	SendMessage(context.Context, RuntimeConfig, SessionRef, SendMessageRequest) (SendResult, error)
+	SendPhoto(context.Context, RuntimeConfig, SessionRef, SendPhotoRequest) (SendResult, error)
 	WaitMessage(context.Context, RuntimeConfig, SessionRef, WaitMessageRequest) (MessageSummary, error)
 	PressButton(context.Context, RuntimeConfig, SessionRef, PressButtonRequest) (PressButtonResult, error)
 	MarkRead(context.Context, RuntimeConfig, SessionRef, MarkReadRequest) error

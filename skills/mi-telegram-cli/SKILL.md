@@ -59,7 +59,7 @@ If the current workspace is not the `mi-telegram-cli` source repo and those scri
 - `auth login|status|logout`
 - `me`
 - `dialogs list|mark-read`
-- `messages read|send|wait|press-button`
+- `messages read|send|send-photo|wait|press-button`
 
 Use `--json` for any agent-driven flow except `auth login --method qr`, which is terminal-interactive by design.
 Even though humans may omit `--method` in an interactive TTY, agent-driven flows should keep `--method` explicit.
@@ -84,6 +84,15 @@ When this skill is used inside another project:
 - Treat `attachments[]` and `buttons[]` as observational metadata; this skill should not assume downloads or generic UI taps exist unless the CLI explicitly exposes them.
 - Treat `WaitTimeout`, `PeerAmbiguous`, and `UnauthorizedProfile` as first-class failures.
 - Do not persist or echo secrets, auth codes, or session blobs in chat output.
+- `messages send-photo` returns `data.media{kind, mimeType, sizeBytes, sha256, caption?}`. The local file path is intentionally never present in `data` or in error messages; `sha256` is the local fingerprint of the bytes uploaded.
+- Supported photo types: `jpg`, `jpeg`, `png`, `webp`. Cap: 10 MiB per file. Caption: up to 1024 characters, plain text (no parse mode).
+- Typed errors specific to `messages send-photo`: `FileNotFound`, `UnsupportedMediaType`, `TelegramSendPhotoFailed`. `InvalidInput` is reused for empty file, oversized file, caption > 1024 chars, or directory paths.
+
+## Protected Profiles
+
+- `qa-alt` is real-user state and is protected against automation. Any modifying subcommand (`auth login`, `auth logout`, `dialogs mark-read`, `messages send`, `messages send-photo`, `messages press-button`) over `--profile qa-alt` returns `ProfileProtected` with the message `qa-alt is protected real-user state; use qa-dev for automation`.
+- Read-only commands over `qa-alt` (`auth status`, `me`, `dialogs list`, `messages read`, `messages wait`) remain available for human inspection.
+- For automated bot QA, always select `qa-dev` (or another dedicated QA profile that is NOT in the protected list).
 
 ## Shell Caveats (Git Bash on Windows)
 

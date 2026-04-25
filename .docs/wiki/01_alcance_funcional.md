@@ -34,6 +34,7 @@ mindmap
       Inspeccionar adjuntos
       Inspeccionar botones inline
       Enviar texto
+      Enviar foto local
       Esperar reply
       Presionar botones inline
       Marcar leido
@@ -64,7 +65,7 @@ mindmap
 | Gestion de perfiles locales | Alta, consulta, listado y baja segura de perfiles con aislamiento por cuenta. |
 | Autenticacion y sesion | Login por código o QR de terminal, reutilizacion de sesion vigente, consulta de estado y logout. |
 | Dialogos y resolucion de peer | Descubrir el dialogo objetivo y resolver username/chat id/dialog id a un peer utilizable. |
-| Operacion de mensajes | Leer mensajes recientes con metadata de adjuntos y botones inline, enviar texto, esperar un reply enriquecido, presionar botones inline compatibles y marcar como leido. |
+| Operacion de mensajes | Leer mensajes recientes con metadata de adjuntos y botones inline, enviar texto, enviar una foto local validada (jpg/jpeg/png/webp, <= 10 MiB) con caption opcional, esperar un reply enriquecido, presionar botones inline compatibles y marcar como leido. |
 | Integracion con agentes | Proveer comandos y salida estructurada para skills de Codex/Claude sin MCP propio. |
 
 ## 6. Fuera de alcance / Evolucion futura

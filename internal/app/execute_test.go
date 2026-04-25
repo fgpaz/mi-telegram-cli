@@ -1,9 +1,15 @@
 package app_test
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
+	"image"
+	"image/color"
+	"image/png"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -1159,6 +1165,368 @@ func TestMeMapsTelegramUnauthorizedToUnauthorizedProfile(t *testing.T) {
 	}
 }
 
+func TestMessagesSendPhotoSuccessReturnsMediaMetadata(t *testing.T) {
+	fake := &fakeTelegram{
+		resolvePeerResult: tg.Peer{
+			ID:          int64(1),
+			Kind:        "bot",
+			DisplayName: "multi tedi",
+			Username:    "multi_tedi_dev_bot",
+		},
+		sendPhotoResult: tg.SendResult{
+			MessageID: int64(213),
+			SentAtUTC: fixedExecutorNow(),
+		},
+	}
+	exec, store, _, stdout := newExecutor(t, fake)
+	ctx := context.Background()
+	createAuthorizedProfile(t, store, "qa-dev")
+
+	imagePath := writeFixturePNG(t, "qa-dev-vis.png")
+
+	if code := exec.Execute(ctx, []string{
+		"messages", "send-photo",
+		"--profile", "qa-dev",
+		"--peer", "@multi_tedi_dev_bot",
+		"--file", imagePath,
+		"--caption", "qa-dev VIS photo smoke",
+		"--json",
+	}); code != 0 {
+		t.Fatalf("Execute(send-photo) exit code = %d, want 0", code)
+	}
+
+	resp := decodeResponse(t, stdout.String())
+	if !resp.OK {
+		t.Fatalf("send-photo ok = false: %+v", resp)
+	}
+	if got := resp.Data["messageId"]; got != float64(213) {
+		t.Fatalf("messageId = %v, want 213", got)
+	}
+	media, ok := resp.Data["media"].(map[string]any)
+	if !ok {
+		t.Fatalf("data.media = %+v, want object", resp.Data["media"])
+	}
+	if media["kind"] != "photo" {
+		t.Fatalf("media.kind = %v, want \"photo\"", media["kind"])
+	}
+	if media["mimeType"] != "image/png" {
+		t.Fatalf("media.mimeType = %v, want image/png", media["mimeType"])
+	}
+	if media["sizeBytes"] == nil || media["sizeBytes"] == float64(0) {
+		t.Fatalf("media.sizeBytes = %v, want > 0", media["sizeBytes"])
+	}
+	sha, ok := media["sha256"].(string)
+	if !ok || len(sha) != 64 {
+		t.Fatalf("media.sha256 = %v, want 64-char hex string", media["sha256"])
+	}
+	if media["caption"] != "qa-dev VIS photo smoke" {
+		t.Fatalf("media.caption = %v, want \"qa-dev VIS photo smoke\"", media["caption"])
+	}
+
+	if len(fake.sendPhotoRequests) != 1 {
+		t.Fatalf("sendPhotoRequests = %d, want 1", len(fake.sendPhotoRequests))
+	}
+	if fake.sendPhotoRequests[0].FilePath != imagePath {
+		t.Fatalf("send photo filePath = %q, want %q", fake.sendPhotoRequests[0].FilePath, imagePath)
+	}
+	if fake.sendPhotoRequests[0].Caption != "qa-dev VIS photo smoke" {
+		t.Fatalf("send photo caption = %q", fake.sendPhotoRequests[0].Caption)
+	}
+}
+
+func TestMessagesSendPhotoOmitsCaptionWhenEmpty(t *testing.T) {
+	fake := &fakeTelegram{
+		resolvePeerResult: tg.Peer{ID: 1, Kind: "bot", DisplayName: "multi tedi", Username: "multi_tedi_dev_bot"},
+		sendPhotoResult:   tg.SendResult{MessageID: 214, SentAtUTC: fixedExecutorNow()},
+	}
+	exec, store, _, stdout := newExecutor(t, fake)
+	ctx := context.Background()
+	createAuthorizedProfile(t, store, "qa-dev")
+	imagePath := writeFixturePNG(t, "no-caption.png")
+
+	if code := exec.Execute(ctx, []string{
+		"messages", "send-photo",
+		"--profile", "qa-dev",
+		"--peer", "@multi_tedi_dev_bot",
+		"--file", imagePath,
+		"--json",
+	}); code != 0 {
+		t.Fatalf("Execute(send-photo no caption) exit code = %d, want 0", code)
+	}
+
+	resp := decodeResponse(t, stdout.String())
+	media, ok := resp.Data["media"].(map[string]any)
+	if !ok {
+		t.Fatalf("data.media missing: %+v", resp.Data)
+	}
+	if _, present := media["caption"]; present {
+		t.Fatalf("media.caption present when caption was empty: %+v", media)
+	}
+}
+
+func TestMessagesSendPhotoMissingFileReturnsFileNotFound(t *testing.T) {
+	fake := &fakeTelegram{
+		resolvePeerResult: tg.Peer{ID: 1, Kind: "bot", DisplayName: "multi tedi", Username: "multi_tedi_dev_bot"},
+	}
+	exec, store, _, stdout := newExecutor(t, fake)
+	ctx := context.Background()
+	createAuthorizedProfile(t, store, "qa-dev")
+
+	missing := filepath.Join(t.TempDir(), "missing.jpg")
+
+	if code := exec.Execute(ctx, []string{
+		"messages", "send-photo",
+		"--profile", "qa-dev",
+		"--peer", "@multi_tedi_dev_bot",
+		"--file", missing,
+		"--json",
+	}); code == 0 {
+		t.Fatalf("Execute(send-photo missing file) exit code = 0, want non-zero")
+	}
+
+	resp := decodeResponse(t, stdout.String())
+	if resp.Error == nil || resp.Error.Code != "FileNotFound" {
+		t.Fatalf("send-photo missing file error = %+v, want FileNotFound", resp.Error)
+	}
+	if len(fake.sendPhotoRequests) != 0 {
+		t.Fatalf("sendPhotoRequests = %d, want 0 (must not call telegram on missing file)", len(fake.sendPhotoRequests))
+	}
+}
+
+func TestMessagesSendPhotoOversizeReturnsInvalidInput(t *testing.T) {
+	exec, store, _, stdout := newExecutor(t, &fakeTelegram{
+		resolvePeerResult: tg.Peer{ID: 1, Kind: "bot", DisplayName: "multi tedi", Username: "multi_tedi_dev_bot"},
+	})
+	ctx := context.Background()
+	createAuthorizedProfile(t, store, "qa-dev")
+
+	oversize := filepath.Join(t.TempDir(), "huge.jpg")
+	payload := bytes.Repeat([]byte{0xFF}, 10*1024*1024+1)
+	if err := os.WriteFile(oversize, payload, 0o600); err != nil {
+		t.Fatalf("write oversize fixture: %v", err)
+	}
+
+	if code := exec.Execute(ctx, []string{
+		"messages", "send-photo",
+		"--profile", "qa-dev",
+		"--peer", "@multi_tedi_dev_bot",
+		"--file", oversize,
+		"--json",
+	}); code == 0 {
+		t.Fatalf("Execute(send-photo oversize) exit code = 0, want non-zero")
+	}
+
+	resp := decodeResponse(t, stdout.String())
+	if resp.Error == nil || resp.Error.Code != "InvalidInput" {
+		t.Fatalf("send-photo oversize error = %+v, want InvalidInput", resp.Error)
+	}
+	if !strings.Contains(resp.Error.Message, "10MiB") {
+		t.Fatalf("oversize error message = %q, want mention of 10MiB", resp.Error.Message)
+	}
+}
+
+func TestMessagesSendPhotoUnsupportedExtensionReturnsTypedError(t *testing.T) {
+	exec, store, _, stdout := newExecutor(t, &fakeTelegram{
+		resolvePeerResult: tg.Peer{ID: 1, Kind: "bot", DisplayName: "multi tedi", Username: "multi_tedi_dev_bot"},
+	})
+	ctx := context.Background()
+	createAuthorizedProfile(t, store, "qa-dev")
+
+	gif := filepath.Join(t.TempDir(), "animated.gif")
+	if err := os.WriteFile(gif, []byte("GIF89a"), 0o600); err != nil {
+		t.Fatalf("write gif fixture: %v", err)
+	}
+
+	if code := exec.Execute(ctx, []string{
+		"messages", "send-photo",
+		"--profile", "qa-dev",
+		"--peer", "@multi_tedi_dev_bot",
+		"--file", gif,
+		"--json",
+	}); code == 0 {
+		t.Fatalf("Execute(send-photo .gif) exit code = 0, want non-zero")
+	}
+
+	resp := decodeResponse(t, stdout.String())
+	if resp.Error == nil || resp.Error.Code != "UnsupportedMediaType" {
+		t.Fatalf("send-photo unsupported error = %+v, want UnsupportedMediaType", resp.Error)
+	}
+}
+
+func TestMessagesSendPhotoMissingFlagsReturnsInvalidInput(t *testing.T) {
+	cases := []struct {
+		name string
+		args []string
+	}{
+		{"missing-profile", []string{"messages", "send-photo", "--peer", "@bot", "--file", "x.jpg", "--json"}},
+		{"missing-peer", []string{"messages", "send-photo", "--profile", "qa-dev", "--file", "x.jpg", "--json"}},
+		{"missing-file", []string{"messages", "send-photo", "--profile", "qa-dev", "--peer", "@bot", "--json"}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			exec, store, _, stdout := newExecutor(t, &fakeTelegram{})
+			ctx := context.Background()
+			createAuthorizedProfile(t, store, "qa-dev")
+
+			if code := exec.Execute(ctx, tc.args); code == 0 {
+				t.Fatalf("Execute(%s) exit code = 0, want non-zero", tc.name)
+			}
+			resp := decodeResponse(t, stdout.String())
+			if resp.Error == nil || resp.Error.Code != "InvalidInput" {
+				t.Fatalf("%s error = %+v, want InvalidInput", tc.name, resp.Error)
+			}
+		})
+	}
+}
+
+func TestMessagesSendPhotoNeverEmitsLocalPath(t *testing.T) {
+	fake := &fakeTelegram{
+		resolvePeerResult: tg.Peer{ID: 1, Kind: "bot", DisplayName: "multi tedi", Username: "multi_tedi_dev_bot"},
+		sendPhotoResult:   tg.SendResult{MessageID: 215, SentAtUTC: fixedExecutorNow()},
+	}
+	exec, store, _, stdout := newExecutor(t, fake)
+	ctx := context.Background()
+	createAuthorizedProfile(t, store, "qa-dev")
+
+	dir := t.TempDir()
+	imagePath := filepath.Join(dir, "secret-path.png")
+	writePNGAt(t, imagePath)
+
+	if code := exec.Execute(ctx, []string{
+		"messages", "send-photo",
+		"--profile", "qa-dev",
+		"--peer", "@multi_tedi_dev_bot",
+		"--file", imagePath,
+		"--caption", "ok",
+		"--json",
+	}); code != 0 {
+		t.Fatalf("Execute(send-photo) exit code = %d, want 0", code)
+	}
+
+	raw := stdout.String()
+	if strings.Contains(raw, imagePath) {
+		t.Fatalf("output leaked filePath %q: %s", imagePath, raw)
+	}
+	if strings.Contains(raw, dir) {
+		t.Fatalf("output leaked temp dir %q: %s", dir, raw)
+	}
+	if strings.Contains(raw, "secret-path") {
+		t.Fatalf("output leaked filename: %s", raw)
+	}
+}
+
+func TestMessagesSendPhotoRespectsProfileLock(t *testing.T) {
+	exec, store, _, stdout := newExecutor(t, &fakeTelegram{
+		resolvePeerResult: tg.Peer{ID: 1, Kind: "bot", DisplayName: "multi tedi", Username: "multi_tedi_dev_bot"},
+		sendPhotoResult:   tg.SendResult{MessageID: 216, SentAtUTC: fixedExecutorNow()},
+	})
+	ctx := context.Background()
+	createAuthorizedProfile(t, store, "qa-dev")
+
+	imagePath := writeFixturePNG(t, "lock.png")
+
+	lock, err := store.AcquireLock("qa-dev")
+	if err != nil {
+		t.Fatalf("AcquireLock() error = %v", err)
+	}
+	defer func() { _ = lock.Release() }()
+
+	if code := exec.Execute(ctx, []string{
+		"messages", "send-photo",
+		"--profile", "qa-dev",
+		"--peer", "@multi_tedi_dev_bot",
+		"--file", imagePath,
+		"--json",
+	}); code == 0 {
+		t.Fatalf("Execute(send-photo locked) exit code = 0, want non-zero")
+	}
+
+	resp := decodeResponse(t, stdout.String())
+	if resp.Error == nil || resp.Error.Code != "ProfileLocked" {
+		t.Fatalf("send-photo locked error = %+v, want ProfileLocked", resp.Error)
+	}
+}
+
+func TestQaAltAutomationIsRejected(t *testing.T) {
+	imagePath := writeFixturePNG(t, "qa-alt.png")
+
+	cases := []struct {
+		name string
+		args []string
+	}{
+		{"auth login", []string{"auth", "login", "--profile", "qa-alt", "--method", "code", "--phone", "+5400000000", "--code", "111", "--json"}},
+		{"auth logout", []string{"auth", "logout", "--profile", "qa-alt", "--json"}},
+		{"dialogs mark-read", []string{"dialogs", "mark-read", "--profile", "qa-alt", "--peer", "@bot", "--json"}},
+		{"messages send", []string{"messages", "send", "--profile", "qa-alt", "--peer", "@bot", "--text", "hi", "--json"}},
+		{"messages send-photo", []string{"messages", "send-photo", "--profile", "qa-alt", "--peer", "@bot", "--file", imagePath, "--json"}},
+		{"messages press-button", []string{"messages", "press-button", "--profile", "qa-alt", "--peer", "@bot", "--message-id", "1", "--button-index", "0", "--json"}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			exec, _, _, stdout := newExecutor(t, &fakeTelegram{})
+			if code := exec.Execute(context.Background(), tc.args); code == 0 {
+				t.Fatalf("Execute(%s) exit code = 0, want non-zero", tc.name)
+			}
+			resp := decodeResponse(t, stdout.String())
+			if resp.Error == nil || resp.Error.Code != "ProfileProtected" {
+				t.Fatalf("%s error = %+v, want ProfileProtected", tc.name, resp.Error)
+			}
+			if !strings.Contains(resp.Error.Message, "qa-alt") {
+				t.Fatalf("%s error message = %q, want mention of qa-alt", tc.name, resp.Error.Message)
+			}
+		})
+	}
+}
+
+func TestQaAltReadOnlyCommandsArePermitted(t *testing.T) {
+	cases := []struct {
+		name string
+		args []string
+	}{
+		{"auth status", []string{"auth", "status", "--profile", "qa-alt", "--json"}},
+		{"me", []string{"me", "--profile", "qa-alt", "--json"}},
+		{"dialogs list", []string{"dialogs", "list", "--profile", "qa-alt", "--json"}},
+		{"messages read", []string{"messages", "read", "--profile", "qa-alt", "--peer", "@bot", "--json"}},
+		{"messages wait", []string{"messages", "wait", "--profile", "qa-alt", "--peer", "@bot", "--timeout", "1", "--json"}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			exec, _, _, stdout := newExecutor(t, &fakeTelegram{
+				resolvePeerResult: tg.Peer{ID: 1, Kind: "bot", DisplayName: "bot", Username: "bot"},
+			})
+			_ = exec.Execute(context.Background(), tc.args)
+			resp := decodeResponse(t, stdout.String())
+			if resp.Error != nil && resp.Error.Code == "ProfileProtected" {
+				t.Fatalf("%s was rejected by qa-alt guard, want pass-through", tc.name)
+			}
+		})
+	}
+}
+
+func writeFixturePNG(t *testing.T, name string) string {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), name)
+	writePNGAt(t, path)
+	return path
+}
+
+func writePNGAt(t *testing.T, path string) {
+	t.Helper()
+	img := image.NewRGBA(image.Rect(0, 0, 4, 4))
+	for x := 0; x < 4; x++ {
+		for y := 0; y < 4; y++ {
+			img.Set(x, y, color.RGBA{R: uint8(x * 60), G: uint8(y * 60), B: 200, A: 255})
+		}
+	}
+	var buf bytes.Buffer
+	if err := png.Encode(&buf, img); err != nil {
+		t.Fatalf("encode png: %v", err)
+	}
+	if err := os.WriteFile(path, buf.Bytes(), 0o600); err != nil {
+		t.Fatalf("write png: %v", err)
+	}
+}
+
 type fakeTelegram struct {
 	loginResult                      tg.LoginResult
 	loginErr                         error
@@ -1179,6 +1547,9 @@ type fakeTelegram struct {
 	sendMessageResult                tg.SendResult
 	sendMessageErr                   error
 	sendMessageRequests              []tg.SendMessageRequest
+	sendPhotoResult                  tg.SendResult
+	sendPhotoErr                     error
+	sendPhotoRequests                []tg.SendPhotoRequest
 	waitMessageResult                tg.MessageSummary
 	waitMessageErr                   error
 	pressButtonResult                tg.PressButtonResult
@@ -1252,6 +1623,11 @@ func (f *fakeTelegram) ReadMessages(_ context.Context, _ tg.RuntimeConfig, _ tg.
 func (f *fakeTelegram) SendMessage(_ context.Context, _ tg.RuntimeConfig, _ tg.SessionRef, req tg.SendMessageRequest) (tg.SendResult, error) {
 	f.sendMessageRequests = append(f.sendMessageRequests, req)
 	return f.sendMessageResult, f.sendMessageErr
+}
+
+func (f *fakeTelegram) SendPhoto(_ context.Context, _ tg.RuntimeConfig, _ tg.SessionRef, req tg.SendPhotoRequest) (tg.SendResult, error) {
+	f.sendPhotoRequests = append(f.sendPhotoRequests, req)
+	return f.sendPhotoResult, f.sendPhotoErr
 }
 
 func (f *fakeTelegram) WaitMessage(_ context.Context, _ tg.RuntimeConfig, _ tg.SessionRef, _ tg.WaitMessageRequest) (tg.MessageSummary, error) {

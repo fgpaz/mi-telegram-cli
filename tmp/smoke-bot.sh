@@ -14,6 +14,9 @@ SKIP_PULL=0
 SKIP_BUILD=0
 SKIP_AUTH_CHECK=0
 MARK_READ=0
+INCLUDE_PHOTO=0
+PHOTO_FILE=""
+PHOTO_CAPTION=""
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -53,12 +56,29 @@ while [[ $# -gt 0 ]]; do
       MARK_READ=1
       shift
       ;;
+    --include-photo)
+      INCLUDE_PHOTO=1
+      shift
+      ;;
+    --photo-file)
+      PHOTO_FILE="$2"
+      shift 2
+      ;;
+    --photo-caption)
+      PHOTO_CAPTION="$2"
+      shift 2
+      ;;
     *)
       echo "Unknown arg: $1" >&2
       exit 1
       ;;
   esac
 done
+
+if [[ "$INCLUDE_PHOTO" == "1" && -z "$PHOTO_FILE" ]]; then
+  echo "--photo-file is required when --include-photo is set" >&2
+  exit 1
+fi
 
 if [[ -z "$PEER" ]]; then
   echo "--peer is required" >&2
@@ -111,6 +131,26 @@ if [[ "$MARK_READ" == "1" ]]; then
   printf '%s\n' "$MARK_READ_OUTPUT" | tail -n +2
 fi
 
+PHOTO_MESSAGE_ID="null"
+PHOTO_SHA256="null"
+if [[ "$INCLUDE_PHOTO" == "1" ]]; then
+  if [[ ! -f "$PHOTO_FILE" ]]; then
+    echo "photo file not found: $PHOTO_FILE" >&2
+    exit 1
+  fi
+
+  write_step "messages send-photo"
+  PHOTO_ARGS=(messages send-photo --profile "$PROFILE" --peer "$PEER" --file "$PHOTO_FILE" --json)
+  if [[ -n "$PHOTO_CAPTION" ]]; then
+    PHOTO_ARGS+=(--caption "$PHOTO_CAPTION")
+  fi
+  PHOTO_OUTPUT="$(invoke_mi_telegram_cli_capture 0 "${PHOTO_ARGS[@]}")"
+  PHOTO_JSON="$(printf '%s\n' "$PHOTO_OUTPUT" | tail -n +2)"
+  printf '%s\n' "$PHOTO_JSON"
+  PHOTO_MESSAGE_ID="$(json_query "$PHOTO_JSON" "data.messageId")"
+  PHOTO_SHA256="\"$(json_query "$PHOTO_JSON" "data.media.sha256")\""
+fi
+
 write_step "summary"
-printf '{\n  "profile": "%s",\n  "peer": "%s",\n  "sentText": "%s",\n  "messageId": %s\n}\n' \
-  "$PROFILE" "$PEER" "$TEXT" "$MESSAGE_ID"
+printf '{\n  "profile": "%s",\n  "peer": "%s",\n  "sentText": "%s",\n  "messageId": %s,\n  "photoMessageId": %s,\n  "photoSha256": %s\n}\n' \
+  "$PROFILE" "$PEER" "$TEXT" "$MESSAGE_ID" "$PHOTO_MESSAGE_ID" "$PHOTO_SHA256"

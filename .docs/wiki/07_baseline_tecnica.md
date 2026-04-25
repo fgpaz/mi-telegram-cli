@@ -21,6 +21,8 @@
 - `messages wait` es bounded por timeout y por una observación local acotada al proceso invocado; no existe espera infinita ni listener persistente en el contrato visible.
 - `messages read` y `messages wait` normalizan media y reply markup a un `MensajeResumen` enriquecido con metadata estable, sin descargar adjuntos.
 - `messages press-button` resuelve un mensaje exacto por `messageId` y acciona solo botones callback reales o informa URLs visibles; no abre WebView ni navegador.
+- `messages send-photo` valida el archivo local antes de tocar Telegram (existencia, extension en `{jpg,jpeg,png,webp}`, tamano `1..10485760` bytes) y nunca expone el `filePath` original en `data` ni en errores; el SHA256 del payload subido es la huella estable observable.
+- El perfil `qa-alt` esta protegido por un guard cross-cutting: los subcomandos modificadores (`auth login`, `auth logout`, `dialogs mark-read`, `messages send`, `messages send-photo`, `messages press-button`) responden `ProfileProtected` cuando se invocan con `--profile qa-alt`; los read-only (`auth status`, `me`, `dialogs list`, `messages read`, `messages wait`) siguen permitidos.
 - La salida automatizable usa envelope estable y no depende del formato humano.
 
 ## 4. Navegacion
@@ -36,3 +38,5 @@ Actualizar `07` y `07_tech/*` cuando cambien:
 - uso de daemon
 - política de timeout y operación larga
 - mecanismo de integración con agentes
+- soporte de envío de media (uploader, tipos permitidos, cap de tamaño)
+- lista de perfiles protegidos contra automatización o el alcance del guard `ProfileProtected`

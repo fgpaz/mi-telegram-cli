@@ -38,6 +38,33 @@ Success criteria:
 - `messages wait` returns `ok=true`
 - the observed reply belongs to the same target peer
 
+## Photo Smoke (multi-tedi VIS)
+
+Use this when the bot must validate a real outgoing photo (Visual Image Service, food photo recognition, etc.).
+
+Preconditions:
+
+1. `qa-dev` is authorized (`auth status` returns `authorized`).
+2. A local image fixture exists under one of the supported types (`jpg`, `jpeg`, `png`, `webp`) and is <= 10 MiB.
+
+Example shape:
+
+```powershell
+$fixture = ".\fixtures\qa-dev-vis.jpg"
+mi-telegram-cli auth status --profile qa-dev --json
+$send = mi-telegram-cli messages send-photo --profile qa-dev --peer "@multi_tedi_dev_bot" --file $fixture --caption "qa-dev VIS photo smoke" --json | ConvertFrom-Json
+$msgId = $send.data.messageId
+mi-telegram-cli messages wait --profile qa-dev --peer "@multi_tedi_dev_bot" --after-id $msgId --timeout 60 --json
+mi-telegram-cli dialogs mark-read --profile qa-dev --peer "@multi_tedi_dev_bot" --json
+```
+
+Success criteria:
+
+- `messages send-photo` returns `ok=true` with `data.media.kind == "photo"` and a 64-char hex `sha256`.
+- `messages wait` returns the bot reply (VIS analysis, validation, etc.) before the timeout.
+- The output JSON of `messages send-photo` does NOT contain the local file path; only the derived `media{}` metadata and the `messageId`.
+- Never use `--profile qa-alt` in this recipe; the guard returns `ProfileProtected`.
+
 ## Cross-Account Smoke
 
 Use this when two dedicated QA accounts must exchange direct messages.

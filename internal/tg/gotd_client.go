@@ -2,6 +2,8 @@ package tg
 
 import (
 	"context"
+	cryptorand "crypto/rand"
+	"encoding/binary"
 	"errors"
 	"fmt"
 	"os"
@@ -17,6 +19,7 @@ import (
 	gotdunpack "github.com/gotd/td/telegram/message/unpack"
 	gotdquery "github.com/gotd/td/telegram/query"
 	gotddialogs "github.com/gotd/td/telegram/query/dialogs"
+	gotduploader "github.com/gotd/td/telegram/uploader"
 	gtraw "github.com/gotd/td/tg"
 )
 
@@ -303,6 +306,63 @@ func (c *GotdClient) SendMessage(ctx context.Context, runtime RuntimeConfig, ses
 		return nil
 	})
 	return result, err
+}
+
+func (c *GotdClient) SendPhoto(ctx context.Context, runtime RuntimeConfig, sessionRef SessionRef, req SendPhotoRequest) (SendResult, error) {
+	var result SendResult
+	err := c.withAuthorizedClient(ctx, runtime, sessionRef, func(runCtx context.Context, _ *gotdtelegram.Client, api *gtraw.Client, _ *gtraw.User) error {
+		inputPeer, err := inputPeerFromPeer(req.Peer)
+		if err != nil {
+			return err
+		}
+
+		uploadedFile, err := gotduploader.NewUploader(api).FromPath(runCtx, req.FilePath)
+		if err != nil {
+			return fmt.Errorf("upload photo: %w", err)
+		}
+
+		randomID, err := newRandomID()
+		if err != nil {
+			return err
+		}
+
+		updates, err := api.MessagesSendMedia(runCtx, &gtraw.MessagesSendMediaRequest{
+			Peer: inputPeer,
+			Media: &gtraw.InputMediaUploadedPhoto{
+				File: uploadedFile,
+			},
+			Message:  req.Caption,
+			RandomID: randomID,
+		})
+		if err != nil {
+			return err
+		}
+
+		id, err := gotdunpack.MessageID(updates, nil)
+		if err != nil {
+			return err
+		}
+
+		sentAtUTC := time.Now().UTC()
+		if message, err := gotdunpack.Message(updates, nil); err == nil {
+			sentAtUTC = time.Unix(int64(message.Date), 0).UTC()
+		}
+
+		result = SendResult{
+			MessageID: int64(id),
+			SentAtUTC: sentAtUTC,
+		}
+		return nil
+	})
+	return result, err
+}
+
+func newRandomID() (int64, error) {
+	var buf [8]byte
+	if _, err := cryptorand.Read(buf[:]); err != nil {
+		return 0, fmt.Errorf("generate random id: %w", err)
+	}
+	return int64(binary.LittleEndian.Uint64(buf[:])), nil
 }
 
 func (c *GotdClient) WaitMessage(ctx context.Context, runtime RuntimeConfig, sessionRef SessionRef, req WaitMessageRequest) (MessageSummary, error) {

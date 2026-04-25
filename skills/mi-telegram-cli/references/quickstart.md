@@ -143,6 +143,7 @@ mi-telegram-cli profiles add --profile qa-dev --display-name "QA Dev"
 mi-telegram-cli auth login --profile qa-dev
 mi-telegram-cli dialogs list --profile qa-dev --json
 mi-telegram-cli messages send --profile qa-dev --peer "@target_bot" --text hola --json
+mi-telegram-cli messages send-photo --profile qa-dev --peer "@target_bot" --file ".\fixtures\sample.jpg" --caption "qa-dev VIS smoke" --json
 mi-telegram-cli messages read --profile qa-dev --peer "@target_bot" --limit 5 --json
 mi-telegram-cli messages press-button --profile qa-dev --peer "@target_bot" --message-id 301 --button-index 0 --json
 mi-telegram-cli messages wait --profile qa-dev --peer "@target_bot" --timeout 30 --json

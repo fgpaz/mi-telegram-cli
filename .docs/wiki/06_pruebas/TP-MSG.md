@@ -30,3 +30,12 @@ Validar lectura enriquecida, envío, espera enriquecida, presión de botones inl
 | `TP-MSG-028` | `RF-MSG-005` | Callback con password requerida | `ButtonPasswordRequired` |
 | `TP-MSG-029` | `RF-MSG-005` | Botón inexistente | `ButtonNotFound` |
 | `TP-MSG-030` | `RF-MSG-005` | Falla genérica del callback | `TelegramCallbackFailed` |
+| `TP-MSG-032` | `RF-MSG-006` | Envío exitoso de foto con caption | `messageId` + `data.media{kind,mimeType,sizeBytes,sha256,caption}` |
+| `TP-MSG-033` | `RF-MSG-006` | Caption omitido cuando viene vacío | `data.media` no contiene la clave `caption` |
+| `TP-MSG-034` | `RF-MSG-006` | Archivo local inexistente | `FileNotFound` y no se llama al adaptador Telegram |
+| `TP-MSG-035` | `RF-MSG-006` | Archivo excede 10 MiB | `InvalidInput` con mensaje que menciona `10MiB` |
+| `TP-MSG-036` | `RF-MSG-006` | Extensión fuera del set permitido | `UnsupportedMediaType` |
+| `TP-MSG-037` | `RF-MSG-006` | Flags ausentes (`profile`, `peer`, `file`) | `InvalidInput` |
+| `TP-MSG-038` | `RF-MSG-006` | El output JSON nunca contiene el path local ni la temp dir | sin filtraciones |
+| `TP-MSG-039` | `RF-MSG-006` | Otra operación ya posee el lock del perfil | `ProfileLocked` |
+| `TP-MSG-040` | `RF-MSG-006` | Guard cross-cutting `qa-alt`: modificadores rechazados, read-only permitidos | `ProfileProtected` para login/logout/mark-read/send/send-photo/press-button; sin error para status/me/dialogs list/messages read/messages wait |

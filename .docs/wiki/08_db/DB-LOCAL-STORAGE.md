@@ -8,6 +8,7 @@ Documentar el layout físico mínimo para persistencia local por perfil.
 
 ```text
 %USERPROFILE%\.mi-telegram-cli\
+  projects.json
   profiles\
     <profileId>\
       profile.json
@@ -27,6 +28,7 @@ Documentar el layout físico mínimo para persistencia local por perfil.
 ## 3. Reglas
 
 - `profile.json` y `auth-state.json` representan metadata controlada por el CLI.
+- `projects.json` contiene bindings globales `projectRoot -> profileId` para resolver perfil por `cwd`; no contiene secretos ni sesión Telegram.
 - `session.bin` es derivación física sensible.
 - `lock.json` o equivalente debe reflejar exclusión operativa.
 - `queue/<ticket>.ticket` materializa orden FIFO por perfil en modo daemon.

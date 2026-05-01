@@ -2,7 +2,10 @@ package profile_test
 
 import (
 	"errors"
+	"os"
 	"path/filepath"
+	"runtime"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -160,6 +163,71 @@ func TestStoreLifecycleAndAuthProjection(t *testing.T) {
 
 	if _, err := store.Get("qa-dev"); !errors.Is(err, profile.ErrProfileNotFound) {
 		t.Fatalf("Get() error after delete = %v, want ErrProfileNotFound", err)
+	}
+}
+
+func TestStoreProjectBindingsLifecycleAndFallbackLookup(t *testing.T) {
+	root := t.TempDir()
+	parent := filepath.Join(root, "repo")
+	child := filepath.Join(parent, "child")
+	if err := os.MkdirAll(child, 0o700); err != nil {
+		t.Fatalf("MkdirAll() error = %v", err)
+	}
+	store := profile.NewStore(t.TempDir(), fixedNow)
+
+	if _, err := store.BindProject(parent, "qa-parent", "QA Parent"); err != nil {
+		t.Fatalf("BindProject(parent) error = %v", err)
+	}
+	if _, err := store.BindProject(child, "qa-child", "QA Child"); err != nil {
+		t.Fatalf("BindProject(child) error = %v", err)
+	}
+
+	items, err := store.ListProjectBindings()
+	if err != nil {
+		t.Fatalf("ListProjectBindings() error = %v", err)
+	}
+	if len(items) != 2 {
+		t.Fatalf("ListProjectBindings() len = %d, want 2", len(items))
+	}
+
+	binding, ok, err := store.ResolveProjectBinding(filepath.Join(child, "nested"))
+	if err != nil || !ok {
+		t.Fatalf("ResolveProjectBinding() = %+v, %v, %v, want match", binding, ok, err)
+	}
+	if binding.ProfileID != "qa-child" {
+		t.Fatalf("ResolveProjectBinding() profile = %q, want qa-child", binding.ProfileID)
+	}
+
+	removed, err := store.RemoveProjectBinding(child)
+	if err != nil {
+		t.Fatalf("RemoveProjectBinding() error = %v", err)
+	}
+	if removed.ProfileID != "qa-child" {
+		t.Fatalf("removed profile = %q, want qa-child", removed.ProfileID)
+	}
+
+	if _, err := store.GetProjectBinding(child); !errors.Is(err, profile.ErrProjectBindingNotFound) {
+		t.Fatalf("GetProjectBinding(removed) error = %v, want ErrProjectBindingNotFound", err)
+	}
+}
+
+func TestStoreProjectBindingsAreCaseInsensitiveOnWindows(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("windows-only case-insensitive path behavior")
+	}
+
+	root := t.TempDir()
+	store := profile.NewStore(t.TempDir(), fixedNow)
+	if _, err := store.BindProject(strings.ToUpper(root), "qa-win", "QA Windows"); err != nil {
+		t.Fatalf("BindProject() error = %v", err)
+	}
+
+	binding, ok, err := store.ResolveProjectBinding(strings.ToLower(root))
+	if err != nil || !ok {
+		t.Fatalf("ResolveProjectBinding() = %+v, %v, %v, want match", binding, ok, err)
+	}
+	if binding.ProfileID != "qa-win" {
+		t.Fatalf("profile = %q, want qa-win", binding.ProfileID)
 	}
 }
 

@@ -6,8 +6,8 @@ El éxito del MVP se mide por su capacidad de ejecutar de forma repetible el smo
 
 ## 2. Propuesta de valor
 
-- Control local completo de sesiones, perfiles y estado operativo por cuenta.
-- Aislamiento fuerte entre cuentas para evitar contaminación de QA y mezcla de identidades.
+- Control local completo de sesiones, perfiles, bindings de proyecto y estado operativo por cuenta.
+- Aislamiento fuerte entre cuentas y proyectos para evitar contaminación de QA y mezcla de identidades.
 - Superficie CLI estable y automatizable desde skills, sin acoplarse a un MCP específico.
 - Enfoque explícito en QA conversacional real sobre bots, no en scraping ni uso humano interactivo general más allá del bootstrap mínimo de autenticación.
 - Base técnica extensible para operar media, adjuntos, daemon local coordinador y más capacidades.
@@ -22,6 +22,10 @@ mindmap
       Listar perfil
       Eliminar perfil
       Aislar sesiones
+    Bindings por proyecto
+      Vincular repo a perfil QA
+      Resolver perfil por cwd
+      Fallback legacy qa-dev
     Autenticacion Telegram
       Login por codigo
       Login por QR terminal
@@ -64,12 +68,12 @@ mindmap
 
 | Area | Alcance MVP |
 | --- | --- |
-| Gestion de perfiles locales | Alta, consulta, listado y baja segura de perfiles con aislamiento por cuenta. |
+| Gestion de perfiles locales y bindings de proyecto | Alta, consulta, listado y baja segura de perfiles con aislamiento por cuenta. Registro global `projects.json` para vincular repos a perfiles QA fijos y resolver perfil por `cwd`. |
 | Autenticacion y sesion | Login por código o QR de terminal, reutilizacion de sesion vigente, consulta de estado y logout. |
 | Dialogos y resolucion de peer | Descubrir el dialogo objetivo y resolver username/chat id/dialog id a un peer utilizable. |
 | Operacion de mensajes | Leer mensajes recientes con metadata de adjuntos y botones inline, enviar texto, enviar una foto local validada (jpg/jpeg/png/webp, <= 10 MiB) con caption opcional, esperar un reply enriquecido, presionar botones inline compatibles y marcar como leido. |
 | Integracion con agentes | Proveer comandos y salida estructurada para skills de Codex/Claude sin MCP propio. |
-| Coordinacion local concurrente | Daemon local de usuario, auto-start opcional y cola FIFO por perfil para evitar `ProfileLocked` entre proyectos sin duplicar sesiones. |
+| Coordinacion local concurrente | Daemon local de usuario, auto-start opcional y cola FIFO por perfil como protección intra-perfil. Los bindings por proyecto evitan contención entre repos concurrentes al usar perfiles físicos distintos. |
 | Auditoria operativa | Eventos JSONL diarios y summary local con latencias, cola, perfil, operación y errores, sin guardar cuerpos de mensajes ni secretos. |
 
 ## 6. Fuera de alcance / Evolucion futura

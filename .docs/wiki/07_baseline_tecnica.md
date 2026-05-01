@@ -9,6 +9,7 @@
 | Binario CLI | Proyecto | Entrada única para usuarios y agentes. |
 | Runtime de perfil | Proyecto | Aislamiento fuerte por cuenta. |
 | Storage local | Proyecto | Persistencia local por perfil y locks. |
+| Registro de proyectos | Proyecto | `projects.json` global selecciona perfil QA fijo por `cwd`. |
 | Daemon local | Proyecto | Auto-start, cola FIFO por perfil, lease de login y estado loopback. |
 | Auditoría JSONL | Proyecto | Eventos diarios redacted y summary operativo. |
 | Adaptador Telegram | Proyecto | Integración MTProto usando `gotd/td`. |
@@ -21,6 +22,8 @@
 - `MI_TELEGRAM_CLI_DAEMON=off` conserva modo directo con `ProfileLocked`; `auto` asegura daemon y usa cola; `required` falla con `DaemonUnavailable` si no puede usar daemon.
 - `--queue-timeout` y `MI_TELEGRAM_CLI_QUEUE_TIMEOUT_SECONDS` controlan la espera antes de ejecutar. El default es 120s.
 - Toda operación Telegram requiere cargar el perfil y validar su estado local.
+- Toda operación Telegram sin `--profile` resuelve perfil efectivo desde `projects.json` por prefijo más largo del `cwd`; sin binding usa fallback `qa-dev`.
+- Un binding existente con perfil ausente falla con `ProjectProfileMissing`, sin fallback silencioso.
 - Toda operacion que hable con Telegram requiere `MI_TELEGRAM_API_ID` y `MI_TELEGRAM_API_HASH` presentes en el entorno del proceso.
 - `auth login` soporta dos modos visibles: `code` y `qr`; el modo `qr` es interactivo de terminal y no usa `--json`.
 - `messages wait` es bounded por timeout y por una observación local acotada al proceso invocado; no existe espera infinita ni listener persistente en el contrato visible.
@@ -46,3 +49,4 @@ Actualizar `07` y `07_tech/*` cuando cambien:
 - mecanismo de integración con agentes
 - soporte de envío de media (uploader, tipos permitidos, cap de tamaño)
 - lista de perfiles protegidos contra automatización o el alcance del guard `ProfileProtected`
+- política de resolución de perfil por proyecto o fallback legacy

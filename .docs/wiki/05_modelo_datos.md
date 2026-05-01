@@ -14,6 +14,7 @@ Este documento define el modelo de datos semántico canónico de `mi-telegram-cl
 | `DaemonQueueTicket` | Operational metadata | Sí | CLI |
 | `DaemonLease` | Operational metadata | Sí | CLI |
 | `AuditEvent` | Operational metadata | Sí | CLI |
+| `ProjectBinding` | Operational metadata | Sí | CLI |
 | `PeerObjetivo` | Read model / projection | No | CLI |
 | `DialogoResumen` | Read model / projection | No | Adaptador Telegram |
 | `MensajeResumen` | Read model / projection | No | Adaptador Telegram |
@@ -99,6 +100,20 @@ Evento operativo diario para diagnóstico.
 Campos mínimos: `eventVersion`, `eventId`, `startedAtUtc`, `completedAtUtc`, `operation`, `profile`, `projectCwd`, `pid`, `daemonPid`, `queueMs`, `durationMs`, `ok`, `exitCode`, `errorCode`, `errorKind`, `peerQuery`.
 Campos prohibidos: texto de mensajes, captions, códigos, passwords, API hash, session blobs y paths de archivos enviados.
 
+### 4.7 `ProjectBinding`
+
+Metadata operativa global que vincula un root de proyecto local a un perfil QA fijo.
+No representa una cuenta Telegram nueva ni duplica sesión; solo selecciona automáticamente un `PerfilLocal` existente o creado como metadata no autorizada.
+
+Campos mínimos: `projectRoot`, `profileId`, `displayName`, `createdAtUtc`, `updatedAtUtc`.
+
+Invariantes:
+
+- `projectRoot` se normaliza a ruta absoluta limpia.
+- En Windows, el matching es case-insensitive.
+- Para subdirectorios, gana el binding de prefijo más largo.
+- Un binding roto nunca cae silenciosamente a `qa-dev`; devuelve `ProjectProfileMissing`.
+
 ## 5. Proyecciones y artefactos no canonicos
 
 ### 5.1 `PeerObjetivo`
@@ -127,6 +142,7 @@ Vista resumida de mensajes usada por lectura, espera, presión de botones inline
 
 - La sesión MTProto serializada pertenece a la capa física y no redefine el modelo semántico.
 - El storage local por perfil debe derivarse desde `PerfilLocal` y `EstadoAutorizacionTelegram`.
+- `projects.json` es metadata operativa global para selección de perfil, no storage de sesión ni verdad Telegram.
 - Los locks y cursores pueden materializarse físicamente si mejoran seguridad u operación, pero siguen siendo metadata operativa.
 
 ## 7. Sync downstream
@@ -149,4 +165,4 @@ Vista resumida de mensajes usada por lectura, espera, presión de botones inline
   - persistir diálogos o mensajes como verdad de dominio
   - convertir la sesión MTProto en entidad semántica
   - descargar adjuntos o persistir binarios locales como verdad de dominio
-  - duplicar sesiones por repo para resolver concurrencia
+  - copiar `session.bin` por repo para resolver concurrencia

@@ -1358,7 +1358,6 @@ func TestMessagesSendPhotoMissingFlagsReturnsInvalidInput(t *testing.T) {
 		name string
 		args []string
 	}{
-		{"missing-profile", []string{"messages", "send-photo", "--peer", "@bot", "--file", "x.jpg", "--json"}},
 		{"missing-peer", []string{"messages", "send-photo", "--profile", "qa-dev", "--file", "x.jpg", "--json"}},
 		{"missing-file", []string{"messages", "send-photo", "--profile", "qa-dev", "--peer", "@bot", "--json"}},
 	}
@@ -1376,6 +1375,114 @@ func TestMessagesSendPhotoMissingFlagsReturnsInvalidInput(t *testing.T) {
 				t.Fatalf("%s error = %+v, want InvalidInput", tc.name, resp.Error)
 			}
 		})
+	}
+}
+
+func TestProjectsBindCreatesProfileAndCurrentUsesLongestPrefix(t *testing.T) {
+	root := t.TempDir()
+	parent := filepath.Join(root, "multi-tedi")
+	child := filepath.Join(parent, "services", "api")
+	if err := os.MkdirAll(child, 0o700); err != nil {
+		t.Fatalf("MkdirAll() error = %v", err)
+	}
+
+	exec, store, _, stdout := newExecutorWithCwd(t, nil, child)
+	ctx := context.Background()
+
+	if code := exec.Execute(ctx, []string{"projects", "bind", "--root", parent, "--profile", "qa-multi-tedi", "--create-profile", "--display-name", "QA Multi Tedi", "--json"}); code != 0 {
+		t.Fatalf("Execute(projects bind parent) exit code = %d, want 0", code)
+	}
+	if code := exec.Execute(ctx, []string{"projects", "bind", "--root", child, "--profile", "qa-api", "--create-profile", "--display-name", "QA API", "--json"}); code != 0 {
+		t.Fatalf("Execute(projects bind child) exit code = %d, want 0", code)
+	}
+
+	if view, err := store.Get("qa-multi-tedi"); err != nil || view.AuthorizationStatus != profile.AuthorizationUnauthorized {
+		t.Fatalf("created profile = %+v, %v, want Unauthorized", view, err)
+	}
+
+	stdout.Reset()
+	if code := exec.Execute(ctx, []string{"projects", "current", "--json"}); code != 0 {
+		t.Fatalf("Execute(projects current) exit code = %d, want 0", code)
+	}
+	resp := decodeResponse(t, stdout.String())
+	binding := resp.Data["binding"].(map[string]any)
+	if got := binding["profileId"]; got != "qa-api" {
+		t.Fatalf("projects current profileId = %v, want qa-api", got)
+	}
+}
+
+func TestProjectsBindRequiresExistingProfileWithoutCreate(t *testing.T) {
+	exec, _, _, stdout := newExecutor(t, nil)
+
+	if code := exec.Execute(context.Background(), []string{"projects", "bind", "--root", t.TempDir(), "--profile", "qa-missing", "--json"}); code == 0 {
+		t.Fatalf("Execute(projects bind without create) exit code = 0, want non-zero")
+	}
+
+	resp := decodeResponse(t, stdout.String())
+	if resp.Error == nil || resp.Error.Code != "ProfileNotFound" {
+		t.Fatalf("projects bind error = %+v, want ProfileNotFound", resp.Error)
+	}
+}
+
+func TestTelegramCommandsResolveProjectProfileAndExplicitOverride(t *testing.T) {
+	root := t.TempDir()
+	fake := &fakeTelegram{
+		resolvePeerResult: tg.Peer{ID: 1, Kind: "bot", DisplayName: "bot", Username: "bot"},
+		sendMessageResult: tg.SendResult{MessageID: 99, SentAtUTC: fixedExecutorNow()},
+	}
+	exec, store, _, stdout := newExecutorWithCwd(t, fake, root)
+	ctx := context.Background()
+	createAuthorizedProfile(t, store, "qa-project")
+	createAuthorizedProfile(t, store, "qa-dev")
+
+	if _, err := store.BindProject(root, "qa-project", "QA Project"); err != nil {
+		t.Fatalf("BindProject() error = %v", err)
+	}
+
+	if code := exec.Execute(ctx, []string{"messages", "send", "--peer", "@bot", "--text", "hi", "--json"}); code != 0 {
+		t.Fatalf("Execute(send implicit profile) exit code = %d, want 0", code)
+	}
+	resp := decodeResponse(t, stdout.String())
+	if resp.Profile != "qa-project" {
+		t.Fatalf("implicit profile = %q, want qa-project", resp.Profile)
+	}
+	if fake.sendMessageRequests[0].Text != "hi" {
+		t.Fatalf("send text = %q, want hi", fake.sendMessageRequests[0].Text)
+	}
+
+	stdout.Reset()
+	if code := exec.Execute(ctx, []string{"messages", "send", "--profile", "qa-dev", "--peer", "@bot", "--text", "override", "--json"}); code != 0 {
+		t.Fatalf("Execute(send explicit profile) exit code = %d, want 0", code)
+	}
+	resp = decodeResponse(t, stdout.String())
+	if resp.Profile != "qa-dev" {
+		t.Fatalf("explicit profile = %q, want qa-dev", resp.Profile)
+	}
+}
+
+func TestProjectBindingMissingProfileReturnsTypedError(t *testing.T) {
+	root := t.TempDir()
+	exec, store, _, stdout := newExecutorWithCwd(t, nil, root)
+	if _, err := store.Create("qa-project", "QA Project", ""); err != nil {
+		t.Fatalf("Create() error = %v", err)
+	}
+	if _, err := store.BindProject(root, "qa-project", "QA Project"); err != nil {
+		t.Fatalf("BindProject() error = %v", err)
+	}
+	if err := store.Delete("qa-project"); err != nil {
+		t.Fatalf("Delete() error = %v", err)
+	}
+
+	if code := exec.Execute(context.Background(), []string{"auth", "status", "--json"}); code == 0 {
+		t.Fatalf("Execute(auth status missing project profile) exit code = 0, want non-zero")
+	}
+
+	resp := decodeResponse(t, stdout.String())
+	if resp.Profile != "qa-project" {
+		t.Fatalf("error profile = %q, want qa-project", resp.Profile)
+	}
+	if resp.Error == nil || resp.Error.Code != "ProjectProfileMissing" {
+		t.Fatalf("error = %+v, want ProjectProfileMissing", resp.Error)
 	}
 }
 
@@ -1645,6 +1752,37 @@ func (f *fakeTelegram) MarkRead(_ context.Context, _ tg.RuntimeConfig, _ tg.Sess
 
 func newExecutor(t *testing.T, fake *fakeTelegram) (*app.Executor, *profile.Store, map[string]string, *strings.Builder) {
 	return newExecutorWithInteractive(t, fake, false)
+}
+
+func newExecutorWithCwd(t *testing.T, fake *fakeTelegram, cwd string) (*app.Executor, *profile.Store, map[string]string, *strings.Builder) {
+	t.Helper()
+
+	if fake == nil {
+		fake = &fakeTelegram{}
+	}
+
+	store := profile.NewStore(t.TempDir(), fixedExecutorNow)
+	stdout := &strings.Builder{}
+	env := map[string]string{
+		"MI_TELEGRAM_API_ID":   "12345",
+		"MI_TELEGRAM_API_HASH": "secret-hash",
+	}
+
+	exec := app.NewExecutor(app.Config{
+		Store:       store,
+		Telegram:    fake,
+		Stdout:      stdout,
+		Stderr:      stdout,
+		Now:         fixedExecutorNow,
+		Cwd:         cwd,
+		Interactive: false,
+		LookupEnv: func(key string) (string, bool) {
+			v, ok := env[key]
+			return v, ok
+		},
+	})
+
+	return exec, store, env, stdout
 }
 
 func newExecutorWithInteractive(t *testing.T, fake *fakeTelegram, interactive bool) (*app.Executor, *profile.Store, map[string]string, *strings.Builder) {

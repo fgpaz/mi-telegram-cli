@@ -2,11 +2,12 @@
 
 ## Objetivo
 
-Permitir que varios proyectos compartan perfiles ya logueados sin competir por `lock.json` ni duplicar sesiones por repo.
+Serializar comandos dentro de un mismo perfil sin competir por `lock.json`.
+La concurrencia entre proyectos debe resolverse preferentemente con bindings a perfiles QA distintos; el daemon queda como protección intra-perfil.
 
 ## Secuencia
 
-1. El agente invoca un comando Telegram con `--profile`.
+1. El agente invoca un comando Telegram con un perfil efectivo explícito o resuelto por proyecto.
 2. El CLI asegura daemon si el modo es `auto` o `required`.
 3. El CLI crea un ticket FIFO bajo el perfil.
 4. El comando espera su turno hasta `--queue-timeout`.

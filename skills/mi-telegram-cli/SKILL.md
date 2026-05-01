@@ -12,10 +12,12 @@ Prefer the CLI over any Telegram MCP when the goal is local control of sessions,
 ## Operating Rules
 
 - Keep one profile per Telegram test account and environment.
+- Prefer one fixed QA profile per active project/repo when concurrent smokes may run. Bind repos with `projects bind` and let commands resolve the profile from `cwd`.
 - Use dedicated QA accounts only, never personal accounts.
 - Keep Telegram logic in the CLI; the skill should only orchestrate shell commands.
 - Do not assume the current workspace is the `mi-telegram-cli` source repo. This skill must work from other projects too.
 - Prefer the default daemon-backed path for concurrent work. Commands against the same profile are serialized by the local daemon FIFO queue; commands against different profiles can run independently.
+- The daemon protects intra-profile contention. Project bindings avoid cross-project contention by routing `multi-tedi` to `qa-multi-tedi`, `salud` to `qa-salud`, and other important repos to their own `qa-<repo>` profile.
 - Use `--queue-timeout <seconds>` or `MI_TELEGRAM_CLI_QUEUE_TIMEOUT_SECONDS` when a smoke has a tighter budget. If the queue expires before execution, treat `QueueTimeout` as a coordination failure, not as a Telegram failure.
 - Set `MI_TELEGRAM_CLI_DAEMON=off` only when you explicitly need legacy direct mode; then `ProfileLocked` can still appear while another operation is active. Set `required` when daemon coordination is mandatory.
 - If `mi-telegram-cli` is not on `PATH`, that is not a blocker by itself. First try a known absolute path or bootstrap the binary from the source repo before considering MCP fallback.
@@ -37,10 +39,12 @@ Prefer the CLI over any Telegram MCP when the goal is local control of sessions,
 1. Verify whether the binary exists and is callable.
 2. If it is not on `PATH`, try the known absolute binary path or a source-repo `bin/` path before treating it as missing.
 3. If the binary is still missing, follow [references/quickstart.md](references/quickstart.md) to install or build it.
-4. Create or reuse a profile.
+4. Create or reuse a profile, or bind the current repo to one:
+   `mi-telegram-cli projects bind --root <repo-root> --profile qa-<repo> --create-profile --display-name "QA <Repo>"`
 5. Login the dedicated account.
    In a real interactive terminal, `auth login --profile <id>` can omit `--method` and the CLI will ask `QR` or `Phone + code`.
    For scripts, agents, and smokes, keep `--method code` or `--method qr` explicit.
+   New profiles created by `projects bind --create-profile` are only local metadata until `auth login --profile <id>` succeeds.
    On Windows, prefer `pwsh` for helper scripts and local interactive wrappers.
 6. Resolve the target bot or dialog.
    In PowerShell, quote peer values such as `"@target_bot"`.
@@ -58,6 +62,7 @@ If the current workspace is not the `mi-telegram-cli` source repo and those scri
 ## Canonical Command Surface
 
 - `profiles add|list|show|remove`
+- `projects bind|list|show|current|remove`
 - `auth login|status|logout`
 - `me`
 - `dialogs list|mark-read`
@@ -67,6 +72,7 @@ If the current workspace is not the `mi-telegram-cli` source repo and those scri
 
 Use `--json` for any agent-driven flow except `auth login --method qr`, which is terminal-interactive by design.
 Even though humans may omit `--method` in an interactive TTY, agent-driven flows should keep `--method` explicit.
+For Telegram commands, explicit `--profile` wins. If it is omitted, the CLI uses the longest matching project binding for the current working directory; if none exists, it falls back to legacy `qa-dev`. A broken binding returns `ProjectProfileMissing` and must be fixed instead of silently using another account.
 
 ## Common Recipes
 
@@ -87,6 +93,7 @@ When this skill is used inside another project:
 - Use `buttons[].index` as the canonical selector when the flow requires `messages press-button`; use `button-text` only as fallback.
 - Treat `attachments[]` and `buttons[]` as observational metadata; this skill should not assume downloads or generic UI taps exist unless the CLI explicitly exposes them.
 - Treat `WaitTimeout`, `PeerAmbiguous`, and `UnauthorizedProfile` as first-class failures.
+- Treat `ProjectProfileMissing` as a binding/configuration failure; run `projects show/current/list` and either recreate the profile or remove/rebind the project.
 - Treat `QueueTimeout`, `DaemonUnavailable`, `DaemonLeaseDenied`, and `DaemonLeaseExpired` as first-class coordination failures.
 - Use `audit summary --json --errors-only` to diagnose repeated profile contention or daemon failures before rerunning a live Telegram smoke.
 - Do not persist or echo secrets, auth codes, or session blobs in chat output.

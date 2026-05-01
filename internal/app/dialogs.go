@@ -25,26 +25,30 @@ func (e *Executor) handleDialogs(ctx context.Context, args []string) (output.Res
 		if err := fs.Parse(args[1:]); err != nil {
 			return e.errorResponse("", "InvalidInput", err.Error()), true
 		}
-		if *profileID == "" || *limit < 1 || *limit > 100 {
-			return e.errorResponse(*profileID, "InvalidInput", "profile is required and limit must be between 1 and 100"), *jsonMode
+		resolvedProfileID, err := e.resolveEffectiveProfile(*profileID, flagProvided(fs, "profile"))
+		if err != nil {
+			return e.mapStoreError(resolvedProfileID, err), *jsonMode
+		}
+		if resolvedProfileID == "" || *limit < 1 || *limit > 100 {
+			return e.errorResponse(resolvedProfileID, "InvalidInput", "profile is required and limit must be between 1 and 100"), *jsonMode
 		}
 
 		queueTimeout := durationFromSeconds(*queueTimeoutSeconds)
 		if queueTimeout < 0 {
-			return e.errorResponse(*profileID, "InvalidInput", "queue-timeout must be zero or greater"), *jsonMode
+			return e.errorResponse(resolvedProfileID, "InvalidInput", "queue-timeout must be zero or greater"), *jsonMode
 		}
-		return e.withProfileLock(*profileID, *jsonMode, queueTimeout, func() output.Response {
+		return e.withProfileLock(resolvedProfileID, *jsonMode, queueTimeout, func() output.Response {
 			runtimeConfig, err := e.requireTelegramConfig()
 			if err != nil {
-				return e.errorResponse(*profileID, "InvalidInput", err.Error())
+				return e.errorResponse(resolvedProfileID, "InvalidInput", err.Error())
 			}
 
-			sessionRef, err := e.authorizedSession(*profileID)
+			sessionRef, err := e.authorizedSession(resolvedProfileID)
 			if err != nil {
 				if errors.Is(err, errUnauthorizedProfile) {
-					return e.errorResponse(*profileID, "UnauthorizedProfile", "profile is not authorized")
+					return e.errorResponse(resolvedProfileID, "UnauthorizedProfile", "profile is not authorized")
 				}
-				return e.mapStoreError(*profileID, err)
+				return e.mapStoreError(resolvedProfileID, err)
 			}
 
 			items, err := e.telegram.ListDialogs(ctx, runtimeConfig, sessionRef, tg.ListDialogsRequest{
@@ -52,12 +56,12 @@ func (e *Executor) handleDialogs(ctx context.Context, args []string) (output.Res
 				Limit: *limit,
 			})
 			if err != nil {
-				return e.mapTelegramUnauthorizedOr(*profileID, "TelegramListDialogsFailed", err)
+				return e.mapTelegramUnauthorizedOr(resolvedProfileID, "TelegramListDialogsFailed", err)
 			}
 
 			return output.Response{
 				OK:      true,
-				Profile: *profileID,
+				Profile: resolvedProfileID,
 				Data: map[string]any{
 					"items": items,
 					"count": len(items),
@@ -73,43 +77,47 @@ func (e *Executor) handleDialogs(ctx context.Context, args []string) (output.Res
 		if err := fs.Parse(args[1:]); err != nil {
 			return e.errorResponse("", "InvalidInput", err.Error()), true
 		}
-		if *profileID == "" || strings.TrimSpace(*peerQuery) == "" {
-			return e.errorResponse(*profileID, "InvalidInput", "profile and peer are required"), *jsonMode
+		resolvedProfileID, err := e.resolveEffectiveProfile(*profileID, flagProvided(fs, "profile"))
+		if err != nil {
+			return e.mapStoreError(resolvedProfileID, err), *jsonMode
 		}
-		if e.isProtectedProfileForAutomation(*profileID) {
-			return e.profileProtectedResponse(*profileID), *jsonMode
+		if resolvedProfileID == "" || strings.TrimSpace(*peerQuery) == "" {
+			return e.errorResponse(resolvedProfileID, "InvalidInput", "profile and peer are required"), *jsonMode
+		}
+		if e.isProtectedProfileForAutomation(resolvedProfileID) {
+			return e.profileProtectedResponse(resolvedProfileID), *jsonMode
 		}
 
 		queueTimeout := durationFromSeconds(*queueTimeoutSeconds)
 		if queueTimeout < 0 {
-			return e.errorResponse(*profileID, "InvalidInput", "queue-timeout must be zero or greater"), *jsonMode
+			return e.errorResponse(resolvedProfileID, "InvalidInput", "queue-timeout must be zero or greater"), *jsonMode
 		}
-		return e.withProfileLock(*profileID, *jsonMode, queueTimeout, func() output.Response {
+		return e.withProfileLock(resolvedProfileID, *jsonMode, queueTimeout, func() output.Response {
 			runtimeConfig, err := e.requireTelegramConfig()
 			if err != nil {
-				return e.errorResponse(*profileID, "InvalidInput", err.Error())
+				return e.errorResponse(resolvedProfileID, "InvalidInput", err.Error())
 			}
 
-			sessionRef, err := e.authorizedSession(*profileID)
+			sessionRef, err := e.authorizedSession(resolvedProfileID)
 			if err != nil {
 				if errors.Is(err, errUnauthorizedProfile) {
-					return e.errorResponse(*profileID, "UnauthorizedProfile", "profile is not authorized")
+					return e.errorResponse(resolvedProfileID, "UnauthorizedProfile", "profile is not authorized")
 				}
-				return e.mapStoreError(*profileID, err)
+				return e.mapStoreError(resolvedProfileID, err)
 			}
 
-			peer, resp, ok := e.resolvePeer(ctx, *profileID, runtimeConfig, sessionRef, *peerQuery)
+			peer, resp, ok := e.resolvePeer(ctx, resolvedProfileID, runtimeConfig, sessionRef, *peerQuery)
 			if !ok {
 				return resp
 			}
 
 			if err := e.telegram.MarkRead(ctx, runtimeConfig, sessionRef, tg.MarkReadRequest{Peer: peer}); err != nil {
-				return e.mapTelegramUnauthorizedOr(*profileID, "TelegramMarkReadFailed", err)
+				return e.mapTelegramUnauthorizedOr(resolvedProfileID, "TelegramMarkReadFailed", err)
 			}
 
 			return output.Response{
 				OK:      true,
-				Profile: *profileID,
+				Profile: resolvedProfileID,
 				Data: map[string]any{
 					"peer":           peer,
 					"markedRead":     true,

@@ -31,33 +31,37 @@ func (e *Executor) handleAuth(ctx context.Context, args []string) (output.Respon
 		if err := fs.Parse(args[1:]); err != nil {
 			return e.errorResponse("", "InvalidInput", err.Error()), true
 		}
-		if *profileID == "" {
-			return e.errorResponse(*profileID, "InvalidInput", "profile is required"), *jsonMode
+		resolvedProfileID, err := e.resolveEffectiveProfile(*profileID, flagProvided(fs, "profile"))
+		if err != nil {
+			return e.mapStoreError(resolvedProfileID, err), *jsonMode
 		}
-		if e.isProtectedProfileForAutomation(*profileID) {
-			return e.profileProtectedResponse(*profileID), *jsonMode
+		if resolvedProfileID == "" {
+			return e.errorResponse(resolvedProfileID, "InvalidInput", "profile is required"), *jsonMode
+		}
+		if e.isProtectedProfileForAutomation(resolvedProfileID) {
+			return e.profileProtectedResponse(resolvedProfileID), *jsonMode
 		}
 
 		method, err := e.resolveLoginMethod(flagProvided(fs, "method"), *methodRaw, *phone, *code, *password, *jsonMode)
 		if err != nil {
-			return e.errorResponse(*profileID, "InvalidInput", err.Error()), *jsonMode
+			return e.errorResponse(resolvedProfileID, "InvalidInput", err.Error()), *jsonMode
 		}
 		if *timeoutSeconds < 1 {
-			return e.errorResponse(*profileID, "InvalidInput", "timeout must be greater than zero"), *jsonMode
+			return e.errorResponse(resolvedProfileID, "InvalidInput", "timeout must be greater than zero"), *jsonMode
 		}
 		queueTimeout := durationFromSeconds(*queueTimeoutSeconds)
 		if queueTimeout < 0 {
-			return e.errorResponse(*profileID, "InvalidInput", "queue-timeout must be zero or greater"), *jsonMode
+			return e.errorResponse(resolvedProfileID, "InvalidInput", "queue-timeout must be zero or greater"), *jsonMode
 		}
 		if method == tg.LoginMethodQR {
 			if *jsonMode {
-				return e.errorResponse(*profileID, "InvalidInput", "--json is not supported with --method qr"), false
+				return e.errorResponse(resolvedProfileID, "InvalidInput", "--json is not supported with --method qr"), false
 			}
 			if strings.TrimSpace(*phone) != "" || strings.TrimSpace(*code) != "" || strings.TrimSpace(*password) != "" {
-				return e.errorResponse(*profileID, "InvalidInput", "--method qr does not support phone, code or password flags"), false
+				return e.errorResponse(resolvedProfileID, "InvalidInput", "--method qr does not support phone, code or password flags"), false
 			}
 			if !e.interactive {
-				return e.errorResponse(*profileID, "InvalidInput", "qr login requires an interactive terminal"), false
+				return e.errorResponse(resolvedProfileID, "InvalidInput", "qr login requires an interactive terminal"), false
 			}
 		}
 
@@ -65,27 +69,27 @@ func (e *Executor) handleAuth(ctx context.Context, args []string) (output.Respon
 		if leaseTTL > 10*time.Minute {
 			leaseTTL = 10 * time.Minute
 		}
-		lease, err := e.store.AcquireLease(*profileID, "auth login", leaseTTL)
+		lease, err := e.store.AcquireLease(resolvedProfileID, "auth login", leaseTTL)
 		if err != nil {
-			return e.mapStoreError(*profileID, err), *jsonMode
+			return e.mapStoreError(resolvedProfileID, err), *jsonMode
 		}
 		defer func() { _ = lease.Release() }()
 
-		return e.withProfileLock(*profileID, *jsonMode, queueTimeout, func() output.Response {
-			if _, err := e.store.Get(*profileID); err != nil {
-				return e.mapStoreError(*profileID, err)
+		return e.withProfileLock(resolvedProfileID, *jsonMode, queueTimeout, func() output.Response {
+			if _, err := e.store.Get(resolvedProfileID); err != nil {
+				return e.mapStoreError(resolvedProfileID, err)
 			}
 
 			runtimeConfig, err := e.requireTelegramConfig()
 			if err != nil {
-				return e.errorResponse(*profileID, "InvalidInput", err.Error())
+				return e.errorResponse(resolvedProfileID, "InvalidInput", err.Error())
 			}
 
 			switch method {
 			case tg.LoginMethodQR:
-				return e.executeQRLogin(ctx, *profileID, runtimeConfig, time.Duration(*timeoutSeconds)*time.Second)
+				return e.executeQRLogin(ctx, resolvedProfileID, runtimeConfig, time.Duration(*timeoutSeconds)*time.Second)
 			default:
-				return e.executeCodeLogin(ctx, *profileID, runtimeConfig, *phone, *code, *password)
+				return e.executeCodeLogin(ctx, resolvedProfileID, runtimeConfig, *phone, *code, *password)
 			}
 		})
 	case "status":
@@ -96,27 +100,31 @@ func (e *Executor) handleAuth(ctx context.Context, args []string) (output.Respon
 		if err := fs.Parse(args[1:]); err != nil {
 			return e.errorResponse("", "InvalidInput", err.Error()), true
 		}
-		if *profileID == "" {
+		resolvedProfileID, err := e.resolveEffectiveProfile(*profileID, flagProvided(fs, "profile"))
+		if err != nil {
+			return e.mapStoreError(resolvedProfileID, err), *jsonMode
+		}
+		if resolvedProfileID == "" {
 			return e.errorResponse("", "InvalidInput", "profile is required"), *jsonMode
 		}
 
 		queueTimeout := durationFromSeconds(*queueTimeoutSeconds)
 		if queueTimeout < 0 {
-			return e.errorResponse(*profileID, "InvalidInput", "queue-timeout must be zero or greater"), *jsonMode
+			return e.errorResponse(resolvedProfileID, "InvalidInput", "queue-timeout must be zero or greater"), *jsonMode
 		}
-		return e.withProfileLock(*profileID, *jsonMode, queueTimeout, func() output.Response {
-			if _, err := e.store.Get(*profileID); err != nil {
-				return e.mapStoreError(*profileID, err)
+		return e.withProfileLock(resolvedProfileID, *jsonMode, queueTimeout, func() output.Response {
+			if _, err := e.store.Get(resolvedProfileID); err != nil {
+				return e.mapStoreError(resolvedProfileID, err)
 			}
 
-			auth, err := e.store.LoadAuthState(*profileID)
+			auth, err := e.store.LoadAuthState(resolvedProfileID)
 			if err != nil {
-				return e.errorResponse(*profileID, "LocalStorageFailure", err.Error())
+				return e.errorResponse(resolvedProfileID, "LocalStorageFailure", err.Error())
 			}
 
 			return output.Response{
 				OK:      true,
-				Profile: *profileID,
+				Profile: resolvedProfileID,
 				Data: map[string]any{
 					"authorizationStatus": auth.AuthorizationStatus,
 					"lastCheckedAtUtc":    auth.LastCheckedAtUTC,
@@ -131,25 +139,29 @@ func (e *Executor) handleAuth(ctx context.Context, args []string) (output.Respon
 		if err := fs.Parse(args[1:]); err != nil {
 			return e.errorResponse("", "InvalidInput", err.Error()), true
 		}
-		if *profileID == "" {
+		resolvedProfileID, err := e.resolveEffectiveProfile(*profileID, flagProvided(fs, "profile"))
+		if err != nil {
+			return e.mapStoreError(resolvedProfileID, err), *jsonMode
+		}
+		if resolvedProfileID == "" {
 			return e.errorResponse("", "InvalidInput", "profile is required"), *jsonMode
 		}
-		if e.isProtectedProfileForAutomation(*profileID) {
-			return e.profileProtectedResponse(*profileID), *jsonMode
+		if e.isProtectedProfileForAutomation(resolvedProfileID) {
+			return e.profileProtectedResponse(resolvedProfileID), *jsonMode
 		}
 
 		queueTimeout := durationFromSeconds(*queueTimeoutSeconds)
 		if queueTimeout < 0 {
-			return e.errorResponse(*profileID, "InvalidInput", "queue-timeout must be zero or greater"), *jsonMode
+			return e.errorResponse(resolvedProfileID, "InvalidInput", "queue-timeout must be zero or greater"), *jsonMode
 		}
-		return e.withProfileLock(*profileID, *jsonMode, queueTimeout, func() output.Response {
-			if _, err := e.store.Get(*profileID); err != nil {
-				return e.mapStoreError(*profileID, err)
+		return e.withProfileLock(resolvedProfileID, *jsonMode, queueTimeout, func() output.Response {
+			if _, err := e.store.Get(resolvedProfileID); err != nil {
+				return e.mapStoreError(resolvedProfileID, err)
 			}
 
-			removed, err := e.store.RemoveSession(*profileID)
+			removed, err := e.store.RemoveSession(resolvedProfileID)
 			if err != nil {
-				return e.errorResponse(*profileID, "LocalStorageFailure", err.Error())
+				return e.errorResponse(resolvedProfileID, "LocalStorageFailure", err.Error())
 			}
 
 			authStatus := profile.AuthorizationUnauthorized
@@ -158,17 +170,17 @@ func (e *Executor) handleAuth(ctx context.Context, args []string) (output.Respon
 			}
 			now := e.now()
 			if err := e.store.SaveAuthState(profile.AuthState{
-				ProfileID:           *profileID,
+				ProfileID:           resolvedProfileID,
 				AuthorizationStatus: authStatus,
 				LastCheckedAtUTC:    &now,
 				LogoutAtUTC:         &now,
 			}); err != nil {
-				return e.errorResponse(*profileID, "LocalStorageFailure", err.Error())
+				return e.errorResponse(resolvedProfileID, "LocalStorageFailure", err.Error())
 			}
 
 			return output.Response{
 				OK:      true,
-				Profile: *profileID,
+				Profile: resolvedProfileID,
 				Data: map[string]any{
 					"authorizationStatus": authStatus,
 					"sessionRemoved":      removed,
@@ -324,36 +336,40 @@ func (e *Executor) handleMe(ctx context.Context, args []string) (output.Response
 	if err := fs.Parse(args); err != nil {
 		return e.errorResponse("", "InvalidInput", err.Error()), true
 	}
-	if *profileID == "" {
+	resolvedProfileID, err := e.resolveEffectiveProfile(*profileID, flagProvided(fs, "profile"))
+	if err != nil {
+		return e.mapStoreError(resolvedProfileID, err), *jsonMode
+	}
+	if resolvedProfileID == "" {
 		return e.errorResponse("", "InvalidInput", "profile is required"), *jsonMode
 	}
 
 	queueTimeout := durationFromSeconds(*queueTimeoutSeconds)
 	if queueTimeout < 0 {
-		return e.errorResponse(*profileID, "InvalidInput", "queue-timeout must be zero or greater"), *jsonMode
+		return e.errorResponse(resolvedProfileID, "InvalidInput", "queue-timeout must be zero or greater"), *jsonMode
 	}
-	return e.withProfileLock(*profileID, *jsonMode, queueTimeout, func() output.Response {
+	return e.withProfileLock(resolvedProfileID, *jsonMode, queueTimeout, func() output.Response {
 		runtimeConfig, err := e.requireTelegramConfig()
 		if err != nil {
-			return e.errorResponse(*profileID, "InvalidInput", err.Error())
+			return e.errorResponse(resolvedProfileID, "InvalidInput", err.Error())
 		}
 
-		sessionRef, err := e.authorizedSession(*profileID)
+		sessionRef, err := e.authorizedSession(resolvedProfileID)
 		if err != nil {
 			if errors.Is(err, errUnauthorizedProfile) {
-				return e.errorResponse(*profileID, "UnauthorizedProfile", "profile is not authorized")
+				return e.errorResponse(resolvedProfileID, "UnauthorizedProfile", "profile is not authorized")
 			}
-			return e.mapStoreError(*profileID, err)
+			return e.mapStoreError(resolvedProfileID, err)
 		}
 
 		accountSummary, err := e.telegram.GetMe(ctx, runtimeConfig, sessionRef)
 		if err != nil {
-			return e.mapTelegramUnauthorizedOr(*profileID, "TelegramMeFailed", err)
+			return e.mapTelegramUnauthorizedOr(resolvedProfileID, "TelegramMeFailed", err)
 		}
 
 		return output.Response{
 			OK:      true,
-			Profile: *profileID,
+			Profile: resolvedProfileID,
 			Data: map[string]any{
 				"accountSummary": accountSummary,
 			},

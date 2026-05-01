@@ -1,6 +1,6 @@
 # 1. Resumen de arquitectura
 
-`mi-telegram-cli` se implementa como un binario local en Go que encapsula el acceso MTProto a Telegram sobre `gotd/td`, administra perfiles locales aislados y expone una superficie CLI estable para automatización por shell. La v1 introduce un daemon local de usuario, headless y loopback-only, que coordina cola FIFO por perfil y auditoría operativa sin mantener pooling persistente de conexiones MTProto.
+`mi-telegram-cli` se implementa como un binario local en Go que encapsula el acceso MTProto a Telegram sobre `gotd/td`, administra perfiles locales aislados, resuelve perfiles QA fijos por proyecto desde el `cwd` y expone una superficie CLI estable para automatización por shell. La v1 introduce un daemon local de usuario, headless y loopback-only, que coordina cola FIFO por perfil y auditoría operativa sin mantener pooling persistente de conexiones MTProto.
 
 ## 2. Project Decision Priority
 
@@ -20,7 +20,9 @@ Fuente de verdad para este proyecto:
 flowchart LR
     A[Skill Codex o Claude] --> B[mi-telegram-cli]
     U[Operador tecnico] --> B
-    B --> C[Runtime local de perfil]
+    B --> P[Registro global de proyectos]
+    P --> C[Runtime local de perfil]
+    B --> C
     B --> H[Daemon local coordinador]
     H --> C
     H --> I[Audit JSONL]
@@ -37,6 +39,7 @@ flowchart LR
 | `mi-telegram-cli` | Binario local | Parsea comandos, valida entradas, aplica locks y entrega salida estructurada. |
 | Runtime de perfil | Limite lógico interno | Carga contexto de un perfil, resuelve peer, ejecuta operaciones y garantiza aislamiento. |
 | Storage local por perfil | Persistencia local | Guarda metadata del perfil, sesión MTProto derivada, estado operativo y locks. |
+| Registro global de proyectos | Persistencia local | Guarda bindings `projectRoot -> profileId`, normaliza paths y resuelve el binding de prefijo más largo para subdirectorios. |
 | Daemon local coordinador | Proceso local headless | Auto-start para comandos Telegram, cola FIFO por perfil, lease de login y auditoría JSONL. |
 | Auditoría JSONL | Persistencia operativa local | Guarda eventos diarios redacted y summaries de latencia/errores. |
 | Adaptador Telegram | Integración | Traduce operaciones del CLI a llamadas MTProto vía `gotd/td`. |
@@ -83,11 +86,13 @@ sequenceDiagram
 - V1 CLI-first, sin MCP propio.
 - V1 con daemon local de usuario para coordinación y auditoría; no expone admin UI ni endpoints remotos.
 - Un perfil = una cuenta Telegram dedicada = un storage aislado.
-- Los perfiles y sesiones ya logueados se comparten entre proyectos desde `~/.mi-telegram-cli`; no se introduce storage por repo.
+- Los perfiles y sesiones viven en `~/.mi-telegram-cli/profiles`; cada repo importante puede vincularse a un perfil QA fijo en `~/.mi-telegram-cli/projects.json`.
+- La resolución de perfil para comandos Telegram es: `--profile` explícito gana; si falta, se usa el binding por `cwd` con prefijo más largo; si no hay binding, fallback legacy `qa-dev`.
+- Si existe un binding pero su perfil no existe, el CLI falla con `ProjectProfileMissing` y no cae silenciosamente a `qa-dev`.
 - Auto-start por defecto para `auth status/logout`, `me`, `dialogs *` y `messages *`; `MI_TELEGRAM_CLI_DAEMON=off` fuerza modo directo y `required` falla si el daemon no está disponible.
 - `auth login` interactivo se protege con lease externa del daemon; TTL = timeout de login + 30s, cap 10m.
 - La cola FIFO por perfil tiene timeout default 120s, configurable con `MI_TELEGRAM_CLI_QUEUE_TIMEOUT_SECONDS` y `--queue-timeout`; si vence antes de ejecutar devuelve `QueueTimeout`.
-- El daemon v1 no mantiene pooling persistente de conexión MTProto; coordina, mide y deja evidencia para decidir pooling futuro.
+- El daemon v1 no mantiene pooling persistente de conexión MTProto; coordina y mide dentro de cada perfil. El pool fijo por proyecto evita contención entre proyectos con perfiles físicos distintos.
 - `auth login` soporta código o QR de terminal sin abrir browser ni UI gráfica adicional.
 - Las operaciones son síncronas por comando; `messages wait` usa espera con timeout por invocación.
 - `messages wait` observa mensajes recientes del peer dentro del proceso de esa invocación y no introduce listeners persistentes ni background workers.
@@ -104,6 +109,7 @@ sequenceDiagram
 | Flow ID | Objetivo | Actores | Modulos |
 | --- | --- | --- | --- |
 | `FL-PRF-01` | Gestionar perfiles locales | Operador tecnico, Agente | CLI, Storage local |
+| `FL-PRJ-01` | Vincular proyectos a perfiles QA fijos | Operador tecnico, Agente | CLI, Registro global, Storage local |
 | `FL-AUT-01` | Autenticar cuenta y persistir sesion | Operador tecnico, Telegram | CLI, Adaptador Telegram, Storage local |
 | `FL-AUT-02` | Consultar o cerrar sesion | Operador tecnico, Agente | CLI, Storage local |
 | `FL-AUT-03` | Consultar identidad activa del perfil | Operador tecnico, Agente | CLI, Adaptador Telegram |
@@ -135,7 +141,7 @@ sequenceDiagram
 - Timeout esperando respuesta del bot: mitigado con `messages wait --timeout` y error tipado.
 - Selección ambigua del botón: mitigado con `button-index` prioritario y error tipado por texto duplicado.
 - Re-login innecesario o sesión inválida: mitigado con `auth status` y reutilización controlada.
-- Competencia entre proyectos por el mismo perfil: mitigado con daemon local, cola FIFO por perfil y timeout tipado `QueueTimeout`.
+- Competencia entre proyectos por el mismo perfil: mitigado primariamente con perfil fijo por proyecto y fallback legacy controlado; la cola FIFO por perfil queda como protección intra-perfil con timeout tipado `QueueTimeout`.
 - Drift operativo no diagnosticable: mitigado con eventos JSONL redacted y `audit summary`.
 
 ### Open questions

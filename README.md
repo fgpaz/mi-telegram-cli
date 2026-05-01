@@ -9,6 +9,17 @@ Useful entry points:
 - Recipes: [skills/mi-telegram-cli/references/recipes.md](skills/mi-telegram-cli/references/recipes.md)
 - Canon: [.docs/wiki/](.docs/wiki/)
 
+## Project Profile Bindings
+
+Repos can be bound to fixed QA profiles so concurrent projects do not share the same Telegram session:
+
+```powershell
+mi-telegram-cli projects bind --root C:\repos\mios\multi-tedi --profile qa-multi-tedi --create-profile --display-name "QA Multi Tedi"
+mi-telegram-cli auth login --profile qa-multi-tedi
+```
+
+For Telegram commands, explicit `--profile` wins. If it is omitted, the CLI resolves the longest matching binding in `~/.mi-telegram-cli/projects.json` for the current working directory, then falls back to legacy `qa-dev` when no binding exists. A broken binding returns `ProjectProfileMissing`.
+
 ## Windows + Git Bash Caveat
 
 When you invoke `mi-telegram-cli` from Git Bash / MSYS2 on Windows, arguments that begin with `/` can be rewritten by the shell host before they ever reach the binary.

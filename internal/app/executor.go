@@ -32,6 +32,7 @@ type Config struct {
 	TerminalSupportsANSI *bool
 	BaseRoot             string
 	DaemonMode           string
+	Cwd                  string
 }
 
 type Executor struct {
@@ -48,9 +49,11 @@ type Executor struct {
 	auditRecorder        *audit.Recorder
 	daemonManager        *daemon.Manager
 	daemonMode           string
+	cwd                  string
 }
 
 var errUnauthorizedProfile = errors.New("unauthorized profile")
+var errProjectProfileMissing = errors.New("project profile missing")
 
 var protectedAutomationProfiles = map[string]bool{
 	"qa-alt": true,
@@ -111,6 +114,7 @@ func NewExecutor(cfg Config) *Executor {
 		interactive:          cfg.Interactive,
 		terminalSupportsANSI: resolveTerminalSupportsANSI(stderr, cfg.Interactive, lookupEnv, cfg.TerminalSupportsANSI),
 		daemonMode:           strings.TrimSpace(cfg.DaemonMode),
+		cwd:                  strings.TrimSpace(cfg.Cwd),
 	}
 	if cfg.BaseRoot != "" {
 		executor.auditRecorder = audit.NewRecorder(cfg.BaseRoot, now)
@@ -146,6 +150,8 @@ func (e *Executor) dispatch(ctx context.Context, args []string) (output.Response
 	switch args[0] {
 	case "profiles":
 		return e.handleProfiles(ctx, args[1:])
+	case "projects":
+		return e.handleProjects(ctx, args[1:])
 	case "auth":
 		return e.handleAuth(ctx, args[1:])
 	case "dialogs":
@@ -161,6 +167,42 @@ func (e *Executor) dispatch(ctx context.Context, args []string) (output.Response
 	default:
 		return e.errorResponse("", "InvalidInput", "unknown command"), false
 	}
+}
+
+func (e *Executor) currentCwd() string {
+	if e.cwd != "" {
+		return e.cwd
+	}
+	cwd, err := os.Getwd()
+	if err != nil {
+		return "."
+	}
+	return cwd
+}
+
+func (e *Executor) resolveEffectiveProfile(profileID string, explicit bool) (string, error) {
+	trimmed := strings.TrimSpace(profileID)
+	if explicit {
+		return trimmed, nil
+	}
+	if trimmed != "" {
+		return trimmed, nil
+	}
+
+	binding, ok, err := e.store.ResolveProjectBinding(e.currentCwd())
+	if err != nil {
+		return "", err
+	}
+	if !ok {
+		return "qa-dev", nil
+	}
+	if _, err := e.store.Get(binding.ProfileID); err != nil {
+		if errors.Is(err, profile.ErrProfileNotFound) {
+			return binding.ProfileID, errProjectProfileMissing
+		}
+		return binding.ProfileID, err
+	}
+	return binding.ProfileID, nil
 }
 
 func (e *Executor) authorizedSession(profileID string) (tg.SessionRef, error) {
@@ -319,6 +361,8 @@ func (e *Executor) mapStoreError(profileID string, err error) output.Response {
 		return e.errorResponse(profileID, "DaemonLeaseExpired", err.Error())
 	case errors.Is(err, daemon.ErrUnavailable):
 		return e.errorResponse(profileID, "DaemonUnavailable", err.Error())
+	case errors.Is(err, errProjectProfileMissing):
+		return e.errorResponse(profileID, "ProjectProfileMissing", "project binding references a missing profile")
 	default:
 		return e.errorResponse(profileID, "LocalStorageFailure", err.Error())
 	}

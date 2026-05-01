@@ -56,10 +56,14 @@ func (e *Executor) handleMessages(ctx context.Context, args []string) (output.Re
 		if err := fs.Parse(args[1:]); err != nil {
 			return e.errorResponse("", "InvalidInput", err.Error()), true
 		}
-		if *profileID == "" || strings.TrimSpace(*peerQuery) == "" || *limit < 1 || *limit > 100 || *afterID < 0 {
-			return e.errorResponse(*profileID, "InvalidInput", "invalid profile, peer, limit or after-id"), *jsonMode
+		resolvedProfileID, err := e.resolveEffectiveProfile(*profileID, flagProvided(fs, "profile"))
+		if err != nil {
+			return e.mapStoreError(resolvedProfileID, err), *jsonMode
 		}
-		return e.executeRead(ctx, *profileID, *peerQuery, *limit, *afterID, *jsonMode, durationFromSeconds(*queueTimeoutSeconds))
+		if resolvedProfileID == "" || strings.TrimSpace(*peerQuery) == "" || *limit < 1 || *limit > 100 || *afterID < 0 {
+			return e.errorResponse(resolvedProfileID, "InvalidInput", "invalid profile, peer, limit or after-id"), *jsonMode
+		}
+		return e.executeRead(ctx, resolvedProfileID, *peerQuery, *limit, *afterID, *jsonMode, durationFromSeconds(*queueTimeoutSeconds))
 	case "send":
 		fs := newFlagSet("messages send")
 		profileID := fs.String("profile", "", "")
@@ -72,14 +76,18 @@ func (e *Executor) handleMessages(ctx context.Context, args []string) (output.Re
 		}
 		trimmedPeerQuery := strings.TrimSpace(*peerQuery)
 		trimmedText := strings.TrimSpace(*text)
-		if *profileID == "" || trimmedPeerQuery == "" || trimmedText == "" {
-			return e.errorResponse(*profileID, "InvalidInput", "profile, peer and text are required"), *jsonMode
+		resolvedProfileID, err := e.resolveEffectiveProfile(*profileID, flagProvided(fs, "profile"))
+		if err != nil {
+			return e.mapStoreError(resolvedProfileID, err), *jsonMode
 		}
-		if e.isProtectedProfileForAutomation(*profileID) {
-			return e.profileProtectedResponse(*profileID), *jsonMode
+		if resolvedProfileID == "" || trimmedPeerQuery == "" || trimmedText == "" {
+			return e.errorResponse(resolvedProfileID, "InvalidInput", "profile, peer and text are required"), *jsonMode
+		}
+		if e.isProtectedProfileForAutomation(resolvedProfileID) {
+			return e.profileProtectedResponse(resolvedProfileID), *jsonMode
 		}
 		e.maybeWarnMSYSPathTranslation(trimmedText, *jsonMode)
-		return e.executeSend(ctx, *profileID, trimmedPeerQuery, trimmedText, *jsonMode, durationFromSeconds(*queueTimeoutSeconds))
+		return e.executeSend(ctx, resolvedProfileID, trimmedPeerQuery, trimmedText, *jsonMode, durationFromSeconds(*queueTimeoutSeconds))
 	case "send-photo":
 		fs := newFlagSet("messages send-photo")
 		profileID := fs.String("profile", "", "")
@@ -93,16 +101,20 @@ func (e *Executor) handleMessages(ctx context.Context, args []string) (output.Re
 		}
 		trimmedPeerQuery := strings.TrimSpace(*peerQuery)
 		trimmedFilePath := strings.TrimSpace(*filePath)
-		if *profileID == "" || trimmedPeerQuery == "" || trimmedFilePath == "" {
-			return e.errorResponse(*profileID, "InvalidInput", "profile, peer and file are required"), *jsonMode
+		resolvedProfileID, err := e.resolveEffectiveProfile(*profileID, flagProvided(fs, "profile"))
+		if err != nil {
+			return e.mapStoreError(resolvedProfileID, err), *jsonMode
+		}
+		if resolvedProfileID == "" || trimmedPeerQuery == "" || trimmedFilePath == "" {
+			return e.errorResponse(resolvedProfileID, "InvalidInput", "profile, peer and file are required"), *jsonMode
 		}
 		if len(*caption) > 1024 {
-			return e.errorResponse(*profileID, "InvalidInput", "caption exceeds 1024 character Telegram limit"), *jsonMode
+			return e.errorResponse(resolvedProfileID, "InvalidInput", "caption exceeds 1024 character Telegram limit"), *jsonMode
 		}
-		if e.isProtectedProfileForAutomation(*profileID) {
-			return e.profileProtectedResponse(*profileID), *jsonMode
+		if e.isProtectedProfileForAutomation(resolvedProfileID) {
+			return e.profileProtectedResponse(resolvedProfileID), *jsonMode
 		}
-		return e.executeSendPhoto(ctx, *profileID, trimmedPeerQuery, trimmedFilePath, *caption, *jsonMode, durationFromSeconds(*queueTimeoutSeconds))
+		return e.executeSendPhoto(ctx, resolvedProfileID, trimmedPeerQuery, trimmedFilePath, *caption, *jsonMode, durationFromSeconds(*queueTimeoutSeconds))
 	case "wait":
 		fs := newFlagSet("messages wait")
 		profileID := fs.String("profile", "", "")
@@ -114,10 +126,14 @@ func (e *Executor) handleMessages(ctx context.Context, args []string) (output.Re
 		if err := fs.Parse(args[1:]); err != nil {
 			return e.errorResponse("", "InvalidInput", err.Error()), true
 		}
-		if *profileID == "" || strings.TrimSpace(*peerQuery) == "" || *timeoutSeconds < 1 || *timeoutSeconds > 300 || *afterID < 0 {
-			return e.errorResponse(*profileID, "InvalidInput", "invalid profile, peer, after-id or timeout"), *jsonMode
+		resolvedProfileID, err := e.resolveEffectiveProfile(*profileID, flagProvided(fs, "profile"))
+		if err != nil {
+			return e.mapStoreError(resolvedProfileID, err), *jsonMode
 		}
-		return e.executeWait(ctx, *profileID, *peerQuery, *afterID, time.Duration(*timeoutSeconds)*time.Second, *jsonMode, durationFromSeconds(*queueTimeoutSeconds))
+		if resolvedProfileID == "" || strings.TrimSpace(*peerQuery) == "" || *timeoutSeconds < 1 || *timeoutSeconds > 300 || *afterID < 0 {
+			return e.errorResponse(resolvedProfileID, "InvalidInput", "invalid profile, peer, after-id or timeout"), *jsonMode
+		}
+		return e.executeWait(ctx, resolvedProfileID, *peerQuery, *afterID, time.Duration(*timeoutSeconds)*time.Second, *jsonMode, durationFromSeconds(*queueTimeoutSeconds))
 	case "press-button":
 		fs := newFlagSet("messages press-button")
 		profileID := fs.String("profile", "", "")
@@ -133,14 +149,18 @@ func (e *Executor) handleMessages(ctx context.Context, args []string) (output.Re
 
 		hasButtonIndex := flagProvided(fs, "button-index")
 		trimmedButtonText := strings.TrimSpace(*buttonText)
-		if *profileID == "" || strings.TrimSpace(*peerQuery) == "" || *messageID < 1 || (!hasButtonIndex && trimmedButtonText == "") || (hasButtonIndex && *buttonIndex < 0) {
-			return e.errorResponse(*profileID, "InvalidInput", "invalid profile, peer, message-id or button selector"), *jsonMode
+		resolvedProfileID, err := e.resolveEffectiveProfile(*profileID, flagProvided(fs, "profile"))
+		if err != nil {
+			return e.mapStoreError(resolvedProfileID, err), *jsonMode
 		}
-		if e.isProtectedProfileForAutomation(*profileID) {
-			return e.profileProtectedResponse(*profileID), *jsonMode
+		if resolvedProfileID == "" || strings.TrimSpace(*peerQuery) == "" || *messageID < 1 || (!hasButtonIndex && trimmedButtonText == "") || (hasButtonIndex && *buttonIndex < 0) {
+			return e.errorResponse(resolvedProfileID, "InvalidInput", "invalid profile, peer, message-id or button selector"), *jsonMode
+		}
+		if e.isProtectedProfileForAutomation(resolvedProfileID) {
+			return e.profileProtectedResponse(resolvedProfileID), *jsonMode
 		}
 
-		return e.executePressButton(ctx, *profileID, *peerQuery, *messageID, *buttonIndex, hasButtonIndex, trimmedButtonText, *jsonMode, durationFromSeconds(*queueTimeoutSeconds))
+		return e.executePressButton(ctx, resolvedProfileID, *peerQuery, *messageID, *buttonIndex, hasButtonIndex, trimmedButtonText, *jsonMode, durationFromSeconds(*queueTimeoutSeconds))
 	default:
 		return e.errorResponse("", "InvalidInput", "unknown messages subcommand"), false
 	}

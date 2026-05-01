@@ -5,6 +5,8 @@
 | `RF-PRF-001` | `TP-PRF` | `TP-PRF-001..003` |
 | `RF-PRF-002` | `TP-PRF` | `TP-PRF-004..006` |
 | `RF-PRF-003` | `TP-PRF` | `TP-PRF-007..009` |
+| `RF-PRJ-001` | `TP-PRF` | `TP-PRF-010..012` |
+| `RF-PRJ-002` | `TP-PRF` | `TP-PRF-013..016` |
 | `RF-AUT-001` | `TP-AUT` | `TP-AUT-001..003,013..020` |
 | `RF-AUT-002` | `TP-AUT` | `TP-AUT-004..006` |
 | `RF-AUT-003` | `TP-AUT` | `TP-AUT-007..009` |

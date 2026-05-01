@@ -38,6 +38,7 @@ Excepción visible:
 | Familia | Contrato visible |
 | --- | --- |
 | `profiles` | Gestión segura de perfiles locales |
+| `projects` | Binding global de repos a perfiles QA fijos |
 | `auth` | Login, estado y logout |
 | `dialogs` | Listado y mark-read |
 | `messages` | Read, send, wait, press-button |

@@ -3,6 +3,7 @@
 ## 1. Topologia operativa
 
 - `mi-telegram-cli` se ejecuta como proceso corto por comando.
+- Antes de abrir una sesión Telegram, los comandos sin `--profile` resuelven el perfil efectivo desde `~/.mi-telegram-cli/projects.json` usando el `cwd` actual.
 - En modo daemon `auto` o `required`, cada invocación Telegram coordina con el daemon local antes de tomar lock.
 - Cada invocación carga un perfil, espera su turno FIFO, toma lock, ejecuta la operación y libera lock.
 - `messages wait` mantiene el proceso abierto solo hasta completar reply o timeout.
@@ -26,7 +27,23 @@ Contenido esperado:
 - lease de login interactivo
 - cursor de lectura si se persiste
 
-## 2.1 Configuracion de runtime
+## 2.1 Registro global de proyectos
+
+Ruta base:
+
+- Windows: `%USERPROFILE%\\.mi-telegram-cli\\projects.json`
+
+Reglas:
+
+- Cada entrada vincula `projectRoot -> profileId`.
+- `projectRoot` se guarda normalizado como ruta absoluta limpia.
+- El matching por `cwd` usa prefijo más largo para soportar subdirectorios y workspaces anidados.
+- En Windows, el matching es case-insensitive.
+- `--profile` explícito siempre gana sobre cualquier binding.
+- Sin binding, el fallback legacy es `qa-dev`.
+- Con binding roto, el CLI devuelve `ProjectProfileMissing`.
+
+## 2.2 Configuracion de runtime
 
 Variables de entorno requeridas para operaciones Telegram (`auth login`, `me`, `dialogs *`, `messages *`):
 

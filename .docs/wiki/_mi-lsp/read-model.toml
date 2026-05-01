@@ -1,0 +1,106 @@
+version = 1
+
+[[family]]
+  name = "functional"
+  intent_keywords = ["scope", "outcome", "result", "resultado", "solucion", "solution", "flow", "feature", "behavior", "rs", "rf", "fl", "test", "workflow", "governance", "ordered_wiki", "spec_core", "technical"]
+  paths = [".docs/wiki/00_gobierno_documental.md", ".docs/wiki/01_alcance_funcional.md", ".docs/wiki/02_arquitectura.md", ".docs/wiki/03_FL.md", ".docs/wiki/03_FL/*.md", ".docs/wiki/04_RF.md", ".docs/wiki/04_RF/*.md"]
+
+[[family]]
+  name = "technical"
+  intent_keywords = ["technical", "governance", "runtime", "backend", "contract", "protocol", "search", "context", "refs", "service", "index", "routing", "ordered_wiki", "spec_core"]
+  paths = [".docs/wiki/07_baseline_tecnica.md", ".docs/wiki/07_tech/*.md", ".docs/wiki/08_modelo_fisico_datos.md", ".docs/wiki/08_db/*.md", ".docs/wiki/09_contratos_tecnicos.md", ".docs/wiki/09_contratos/*.md"]
+
+[generic_docs]
+  paths = ["README.md", "README*.md", "docs/", ".docs/"]
+
+[reading_pack]
+  max_docs = 7
+  functional_stage_order = ["governance", "scope", "architecture", "flow", "requirements"]
+  technical_stage_order = ["governance", "scope", "architecture", "technical_baseline", "technical_detail", "physical_data", "contracts"]
+  ux_stage_order = ["governance", "scope", "architecture", "ux_global", "ux_research", "ux_spec", "ux_handoff"]
+
+[governance]
+  source_doc = ".docs/wiki/00_gobierno_documental.md"
+  source_format = "markdown+yaml"
+  profile = "spec_backend"
+  effective_base = "ordered_wiki"
+  effective_overlays = ["spec_core", "technical"]
+  context_chain = ["governance", "scope", "architecture", "flow", "requirements", "technical_baseline", "contracts"]
+  closure_chain = ["governance", "flow", "requirements", "technical_baseline", "contracts", "tests"]
+  audit_chain = ["governance", "flow", "requirements", "technical_baseline", "physical_data", "contracts", "tests"]
+  blocking_rules = ["missing_governance", "stale_projection", "canon_contract_drift", "secret_leakage"]
+  [governance.projection]
+    output = ".docs/wiki/_mi-lsp/read-model.toml"
+    format = "toml"
+    auto_sync = true
+    versioned = true
+
+  [[governance.hierarchy]]
+    id = "governance"
+    label = "Gobierno documental"
+    layer = "00"
+    family = "functional"
+    paths = [".docs/wiki/00_gobierno_documental.md"]
+
+  [[governance.hierarchy]]
+    id = "scope"
+    label = "Alcance funcional"
+    layer = "01"
+    family = "functional"
+    paths = [".docs/wiki/01_alcance_funcional.md"]
+
+  [[governance.hierarchy]]
+    id = "architecture"
+    label = "Arquitectura"
+    layer = "02"
+    family = "functional"
+    paths = [".docs/wiki/02_arquitectura.md"]
+
+  [[governance.hierarchy]]
+    id = "flow"
+    label = "Flujos"
+    layer = "03"
+    family = "functional"
+    paths = [".docs/wiki/03_FL.md", ".docs/wiki/03_FL/*.md"]
+
+  [[governance.hierarchy]]
+    id = "requirements"
+    label = "Requerimientos funcionales"
+    layer = "04"
+    family = "functional"
+    paths = [".docs/wiki/04_RF.md", ".docs/wiki/04_RF/*.md"]
+
+  [[governance.hierarchy]]
+    id = "semantic_data"
+    label = "Modelo de datos"
+    layer = "05"
+    family = "data"
+    paths = [".docs/wiki/05_modelo_datos.md"]
+
+  [[governance.hierarchy]]
+    id = "tests"
+    label = "Pruebas"
+    layer = "06"
+    family = "qa"
+    paths = [".docs/wiki/06_matriz_pruebas_RF.md", ".docs/wiki/06_pruebas/*.md"]
+
+  [[governance.hierarchy]]
+    id = "technical_baseline"
+    label = "Baseline tecnica"
+    layer = "07"
+    family = "technical"
+    paths = [".docs/wiki/07_baseline_tecnica.md", ".docs/wiki/07_tech/*.md"]
+
+  [[governance.hierarchy]]
+    id = "physical_data"
+    label = "Modelo fisico"
+    layer = "08"
+    family = "technical"
+    paths = [".docs/wiki/08_modelo_fisico_datos.md", ".docs/wiki/08_db/*.md"]
+
+  [[governance.hierarchy]]
+    id = "contracts"
+    label = "Contratos tecnicos"
+    layer = "09"
+    family = "technical"
+    paths = [".docs/wiki/09_contratos_tecnicos.md", ".docs/wiki/09_contratos/*.md"]

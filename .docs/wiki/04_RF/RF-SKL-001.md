@@ -43,7 +43,7 @@
 6. Solo si hace falta para identificar el target, revisa docs/config del repo consumidor sin exponer secretos.
 7. Si corresponde, envía `/start <pairingCode>`.
 8. Envía el mensaje funcional del smoke, por defecto `hola`.
-9. Mantiene las operaciones serializadas por perfil; no paraleliza `status`, `me`, `read`, `send` ni `wait` sobre el mismo perfil.
+9. Usa la cola FIFO del daemon para serializar por perfil; no trata `QueueTimeout` como error Telegram.
 10. Si el bot devuelve botones inline y el smoke lo requiere, inspecciona `buttons[]` y ejecuta `messages press-button`, priorizando `button-index`.
 11. Ejecuta `messages wait`.
 12. Si el recipe es cross-account, ejecuta la segunda secuencia sobre un perfil dedicado independiente y correlaciona el intercambio con un token compartido.
@@ -64,7 +64,7 @@
 | `SmokeSequenceFailed` | no se puede resolver una invocacion valida del CLI | `Failed` |
 | `UnauthorizedProfile` | perfil no autorizado al iniciar el smoke | `Failed` |
 | `PeerNotFound` | peer no resoluble | `Failed` |
-| `ProfileLocked` | existe otra operación activa sobre el mismo perfil | `Failed` |
+| `QueueTimeout` | la cola del perfil no llegó a ejecutar dentro del presupuesto | `Failed` |
 | `WaitTimeout` | no llega respuesta del bot | `Failed` |
 | `ButtonUnsupported` | el smoke requiere un botón no accionable por el CLI | `Failed` |
 | `SmokeSequenceFailed` | falla en cualquier otro paso obligatorio | `Failed` |
@@ -79,7 +79,7 @@
 - En Windows, la skill prefiere `pwsh` para helpers o handoff interactivo visible; no depende de `powershell.exe` en `PATH`.
 - En PowerShell, peers `@username` o `@bot` se pasan quoted.
 - En Git Bash / MSYS sobre Windows, cualquier `--text` que deba empezar con `/` requiere `MSYS_NO_PATHCONV=1` o un helper que lo exporte; de lo contrario el shell puede reescribir el payload antes de que llegue al CLI.
-- La skill mantiene una sola secuencia activa por perfil; incluso `auth status`, `me`, `dialogs list` o `messages read` pueden devolver `ProfileLocked` si otro comando ya tomó el lock.
+- La skill usa daemon local por defecto; `MI_TELEGRAM_CLI_DAEMON=off` conserva el fallback directo donde puede aparecer `ProfileLocked`.
 - Si el smoke necesita accionar un botón inline, la skill debe inspeccionar `buttons[]` y preferir `button-index` antes que `button-text`.
 - Si el operador debe ver QR, código o password en una terminal visible, la skill delega un comando local antes de reanudar el recipe.
 - El smoke puede ejecutarse como recipe cross-account con dos perfiles dedicados; cuando aplica, la correlación se hace con un token compartido y cada perfil conserva su propia serialización.

@@ -10,6 +10,10 @@ Este documento define el modelo de datos semántico canónico de `mi-telegram-cl
 | `EstadoAutorizacionTelegram` | Supporting entity | Sí | CLI |
 | `LockPerfil` | Operational metadata | Sí | CLI |
 | `CursorLectura` | Operational metadata | Sí | CLI |
+| `DaemonState` | Operational metadata | Sí | CLI |
+| `DaemonQueueTicket` | Operational metadata | Sí | CLI |
+| `DaemonLease` | Operational metadata | Sí | CLI |
+| `AuditEvent` | Operational metadata | Sí | CLI |
 | `PeerObjetivo` | Read model / projection | No | CLI |
 | `DialogoResumen` | Read model / projection | No | Adaptador Telegram |
 | `MensajeResumen` | Read model / projection | No | Adaptador Telegram |
@@ -72,6 +76,29 @@ Metadata operativa para delimitar lecturas recientes y waits con `after-id`.
 - No es verdad de negocio.
 - Puede persistirse o recalcularse según implementación, pero RF debe tratarlo como soporte operativo.
 
+### 4.3 `DaemonState`
+
+Metadata operativa del daemon local de usuario.
+Incluye host loopback, puerto, token local, pid y `startedAtUtc`.
+No es autoridad remota ni credencial Telegram.
+
+### 4.4 `DaemonQueueTicket`
+
+Ticket FIFO por perfil que ordena comandos concurrentes antes de tomar `LockPerfil`.
+Lifecycle: `Created -> FirstInQueue -> Executing -> Removed` o `Created -> Timeout -> Removed`.
+
+### 4.5 `DaemonLease`
+
+Reserva temporal para `auth login` interactivo.
+Lifecycle: `Acquired -> Released` o `Acquired -> Expired`.
+TTL canónico: timeout de login + 30s, máximo 10m.
+
+### 4.6 `AuditEvent`
+
+Evento operativo diario para diagnóstico.
+Campos mínimos: `eventVersion`, `eventId`, `startedAtUtc`, `completedAtUtc`, `operation`, `profile`, `projectCwd`, `pid`, `daemonPid`, `queueMs`, `durationMs`, `ok`, `exitCode`, `errorCode`, `errorKind`, `peerQuery`.
+Campos prohibidos: texto de mensajes, captions, códigos, passwords, API hash, session blobs y paths de archivos enviados.
+
 ## 5. Proyecciones y artefactos no canonicos
 
 ### 5.1 `PeerObjetivo`
@@ -122,3 +149,4 @@ Vista resumida de mensajes usada por lectura, espera, presión de botones inline
   - persistir diálogos o mensajes como verdad de dominio
   - convertir la sesión MTProto en entidad semántica
   - descargar adjuntos o persistir binarios locales como verdad de dominio
+  - duplicar sesiones por repo para resolver concurrencia

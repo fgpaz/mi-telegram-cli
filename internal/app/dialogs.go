@@ -21,6 +21,7 @@ func (e *Executor) handleDialogs(ctx context.Context, args []string) (output.Res
 		query := fs.String("query", "", "")
 		limit := fs.Int("limit", 20, "")
 		jsonMode := fs.Bool("json", false, "")
+		queueTimeoutSeconds := queueTimeoutFlag(fs, e.defaultQueueTimeout())
 		if err := fs.Parse(args[1:]); err != nil {
 			return e.errorResponse("", "InvalidInput", err.Error()), true
 		}
@@ -28,7 +29,11 @@ func (e *Executor) handleDialogs(ctx context.Context, args []string) (output.Res
 			return e.errorResponse(*profileID, "InvalidInput", "profile is required and limit must be between 1 and 100"), *jsonMode
 		}
 
-		return e.withProfileLock(*profileID, *jsonMode, func() output.Response {
+		queueTimeout := durationFromSeconds(*queueTimeoutSeconds)
+		if queueTimeout < 0 {
+			return e.errorResponse(*profileID, "InvalidInput", "queue-timeout must be zero or greater"), *jsonMode
+		}
+		return e.withProfileLock(*profileID, *jsonMode, queueTimeout, func() output.Response {
 			runtimeConfig, err := e.requireTelegramConfig()
 			if err != nil {
 				return e.errorResponse(*profileID, "InvalidInput", err.Error())
@@ -64,6 +69,7 @@ func (e *Executor) handleDialogs(ctx context.Context, args []string) (output.Res
 		profileID := fs.String("profile", "", "")
 		peerQuery := fs.String("peer", "", "")
 		jsonMode := fs.Bool("json", false, "")
+		queueTimeoutSeconds := queueTimeoutFlag(fs, e.defaultQueueTimeout())
 		if err := fs.Parse(args[1:]); err != nil {
 			return e.errorResponse("", "InvalidInput", err.Error()), true
 		}
@@ -74,7 +80,11 @@ func (e *Executor) handleDialogs(ctx context.Context, args []string) (output.Res
 			return e.profileProtectedResponse(*profileID), *jsonMode
 		}
 
-		return e.withProfileLock(*profileID, *jsonMode, func() output.Response {
+		queueTimeout := durationFromSeconds(*queueTimeoutSeconds)
+		if queueTimeout < 0 {
+			return e.errorResponse(*profileID, "InvalidInput", "queue-timeout must be zero or greater"), *jsonMode
+		}
+		return e.withProfileLock(*profileID, *jsonMode, queueTimeout, func() output.Response {
 			runtimeConfig, err := e.requireTelegramConfig()
 			if err != nil {
 				return e.errorResponse(*profileID, "InvalidInput", err.Error())

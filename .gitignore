@@ -1,5 +1,6 @@
 infra/.env
 .playwright-mcp/
+.mi-lsp/
 tmp_test.txt
 *.exe
 /bin/mi-telegram-cli

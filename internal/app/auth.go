@@ -27,6 +27,7 @@ func (e *Executor) handleAuth(ctx context.Context, args []string) (output.Respon
 		password := fs.String("password", "", "")
 		timeoutSeconds := fs.Int("timeout", 120, "")
 		jsonMode := fs.Bool("json", false, "")
+		queueTimeoutSeconds := queueTimeoutFlag(fs, e.defaultQueueTimeout())
 		if err := fs.Parse(args[1:]); err != nil {
 			return e.errorResponse("", "InvalidInput", err.Error()), true
 		}
@@ -44,6 +45,10 @@ func (e *Executor) handleAuth(ctx context.Context, args []string) (output.Respon
 		if *timeoutSeconds < 1 {
 			return e.errorResponse(*profileID, "InvalidInput", "timeout must be greater than zero"), *jsonMode
 		}
+		queueTimeout := durationFromSeconds(*queueTimeoutSeconds)
+		if queueTimeout < 0 {
+			return e.errorResponse(*profileID, "InvalidInput", "queue-timeout must be zero or greater"), *jsonMode
+		}
 		if method == tg.LoginMethodQR {
 			if *jsonMode {
 				return e.errorResponse(*profileID, "InvalidInput", "--json is not supported with --method qr"), false
@@ -56,7 +61,17 @@ func (e *Executor) handleAuth(ctx context.Context, args []string) (output.Respon
 			}
 		}
 
-		return e.withProfileLock(*profileID, *jsonMode, func() output.Response {
+		leaseTTL := time.Duration(*timeoutSeconds+30) * time.Second
+		if leaseTTL > 10*time.Minute {
+			leaseTTL = 10 * time.Minute
+		}
+		lease, err := e.store.AcquireLease(*profileID, "auth login", leaseTTL)
+		if err != nil {
+			return e.mapStoreError(*profileID, err), *jsonMode
+		}
+		defer func() { _ = lease.Release() }()
+
+		return e.withProfileLock(*profileID, *jsonMode, queueTimeout, func() output.Response {
 			if _, err := e.store.Get(*profileID); err != nil {
 				return e.mapStoreError(*profileID, err)
 			}
@@ -77,6 +92,7 @@ func (e *Executor) handleAuth(ctx context.Context, args []string) (output.Respon
 		fs := newFlagSet("auth status")
 		profileID := fs.String("profile", "", "")
 		jsonMode := fs.Bool("json", false, "")
+		queueTimeoutSeconds := queueTimeoutFlag(fs, e.defaultQueueTimeout())
 		if err := fs.Parse(args[1:]); err != nil {
 			return e.errorResponse("", "InvalidInput", err.Error()), true
 		}
@@ -84,7 +100,11 @@ func (e *Executor) handleAuth(ctx context.Context, args []string) (output.Respon
 			return e.errorResponse("", "InvalidInput", "profile is required"), *jsonMode
 		}
 
-		return e.withProfileLock(*profileID, *jsonMode, func() output.Response {
+		queueTimeout := durationFromSeconds(*queueTimeoutSeconds)
+		if queueTimeout < 0 {
+			return e.errorResponse(*profileID, "InvalidInput", "queue-timeout must be zero or greater"), *jsonMode
+		}
+		return e.withProfileLock(*profileID, *jsonMode, queueTimeout, func() output.Response {
 			if _, err := e.store.Get(*profileID); err != nil {
 				return e.mapStoreError(*profileID, err)
 			}
@@ -107,6 +127,7 @@ func (e *Executor) handleAuth(ctx context.Context, args []string) (output.Respon
 		fs := newFlagSet("auth logout")
 		profileID := fs.String("profile", "", "")
 		jsonMode := fs.Bool("json", false, "")
+		queueTimeoutSeconds := queueTimeoutFlag(fs, e.defaultQueueTimeout())
 		if err := fs.Parse(args[1:]); err != nil {
 			return e.errorResponse("", "InvalidInput", err.Error()), true
 		}
@@ -117,7 +138,11 @@ func (e *Executor) handleAuth(ctx context.Context, args []string) (output.Respon
 			return e.profileProtectedResponse(*profileID), *jsonMode
 		}
 
-		return e.withProfileLock(*profileID, *jsonMode, func() output.Response {
+		queueTimeout := durationFromSeconds(*queueTimeoutSeconds)
+		if queueTimeout < 0 {
+			return e.errorResponse(*profileID, "InvalidInput", "queue-timeout must be zero or greater"), *jsonMode
+		}
+		return e.withProfileLock(*profileID, *jsonMode, queueTimeout, func() output.Response {
 			if _, err := e.store.Get(*profileID); err != nil {
 				return e.mapStoreError(*profileID, err)
 			}
@@ -295,6 +320,7 @@ func (e *Executor) handleMe(ctx context.Context, args []string) (output.Response
 	fs := newFlagSet("me")
 	profileID := fs.String("profile", "", "")
 	jsonMode := fs.Bool("json", false, "")
+	queueTimeoutSeconds := queueTimeoutFlag(fs, e.defaultQueueTimeout())
 	if err := fs.Parse(args); err != nil {
 		return e.errorResponse("", "InvalidInput", err.Error()), true
 	}
@@ -302,7 +328,11 @@ func (e *Executor) handleMe(ctx context.Context, args []string) (output.Response
 		return e.errorResponse("", "InvalidInput", "profile is required"), *jsonMode
 	}
 
-	return e.withProfileLock(*profileID, *jsonMode, func() output.Response {
+	queueTimeout := durationFromSeconds(*queueTimeoutSeconds)
+	if queueTimeout < 0 {
+		return e.errorResponse(*profileID, "InvalidInput", "queue-timeout must be zero or greater"), *jsonMode
+	}
+	return e.withProfileLock(*profileID, *jsonMode, queueTimeout, func() output.Response {
 		runtimeConfig, err := e.requireTelegramConfig()
 		if err != nil {
 			return e.errorResponse(*profileID, "InvalidInput", err.Error())

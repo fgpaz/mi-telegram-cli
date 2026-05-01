@@ -1,6 +1,6 @@
 # 1. Resumen de arquitectura
 
-`mi-telegram-cli` se implementa como un binario local en Go que encapsula el acceso MTProto a Telegram sobre `gotd/td`, administra perfiles locales aislados y expone una superficie CLI estable para automatización por shell. La v1 no introduce servicios remotos propios ni un daemon residente: cada comando abre el perfil, ejecuta la operación y cierra contexto; `messages wait` y `auth login --method qr` son las únicas operaciones de espera prolongada por invocación.
+`mi-telegram-cli` se implementa como un binario local en Go que encapsula el acceso MTProto a Telegram sobre `gotd/td`, administra perfiles locales aislados y expone una superficie CLI estable para automatización por shell. La v1 introduce un daemon local de usuario, headless y loopback-only, que coordina cola FIFO por perfil y auditoría operativa sin mantener pooling persistente de conexiones MTProto.
 
 ## 2. Project Decision Priority
 
@@ -21,6 +21,9 @@ flowchart LR
     A[Skill Codex o Claude] --> B[mi-telegram-cli]
     U[Operador tecnico] --> B
     B --> C[Runtime local de perfil]
+    B --> H[Daemon local coordinador]
+    H --> C
+    H --> I[Audit JSONL]
     C --> D[Storage local por perfil]
     C --> E[Adaptador MTProto gotd/td]
     E --> F[Telegram]
@@ -34,6 +37,8 @@ flowchart LR
 | `mi-telegram-cli` | Binario local | Parsea comandos, valida entradas, aplica locks y entrega salida estructurada. |
 | Runtime de perfil | Limite lógico interno | Carga contexto de un perfil, resuelve peer, ejecuta operaciones y garantiza aislamiento. |
 | Storage local por perfil | Persistencia local | Guarda metadata del perfil, sesión MTProto derivada, estado operativo y locks. |
+| Daemon local coordinador | Proceso local headless | Auto-start para comandos Telegram, cola FIFO por perfil, lease de login y auditoría JSONL. |
+| Auditoría JSONL | Persistencia operativa local | Guarda eventos diarios redacted y summaries de latencia/errores. |
 | Adaptador Telegram | Integración | Traduce operaciones del CLI a llamadas MTProto vía `gotd/td`. |
 | Skill de agente | Integración local | Invoca el CLI desde shell y adapta su salida al flujo de Codex/Claude. |
 | Telegram | Servicio externo | Autenticación, diálogos, recepción y entrega de mensajes. |
@@ -76,8 +81,13 @@ sequenceDiagram
 ## 7. Decisiones arquitectonicas base
 
 - V1 CLI-first, sin MCP propio.
-- V1 sin daemon local persistente.
+- V1 con daemon local de usuario para coordinación y auditoría; no expone admin UI ni endpoints remotos.
 - Un perfil = una cuenta Telegram dedicada = un storage aislado.
+- Los perfiles y sesiones ya logueados se comparten entre proyectos desde `~/.mi-telegram-cli`; no se introduce storage por repo.
+- Auto-start por defecto para `auth status/logout`, `me`, `dialogs *` y `messages *`; `MI_TELEGRAM_CLI_DAEMON=off` fuerza modo directo y `required` falla si el daemon no está disponible.
+- `auth login` interactivo se protege con lease externa del daemon; TTL = timeout de login + 30s, cap 10m.
+- La cola FIFO por perfil tiene timeout default 120s, configurable con `MI_TELEGRAM_CLI_QUEUE_TIMEOUT_SECONDS` y `--queue-timeout`; si vence antes de ejecutar devuelve `QueueTimeout`.
+- El daemon v1 no mantiene pooling persistente de conexión MTProto; coordina, mide y deja evidencia para decidir pooling futuro.
 - `auth login` soporta código o QR de terminal sin abrir browser ni UI gráfica adicional.
 - Las operaciones son síncronas por comando; `messages wait` usa espera con timeout por invocación.
 - `messages wait` observa mensajes recientes del peer dentro del proceso de esa invocación y no introduce listeners persistentes ni background workers.
@@ -105,6 +115,8 @@ sequenceDiagram
 | `FL-MSG-05` | Presionar boton inline de un mensaje | Agente, Telegram, Bot objetivo | CLI, Adaptador Telegram |
 | `FL-MSG-06` | Enviar foto a peer | Agente, Telegram, Bot objetivo | CLI, Adaptador Telegram |
 | `FL-SKL-01` | Ejecutar smoke desde skill | Agente, Bot objetivo | Skill, CLI |
+| `FL-DAE-01` | Coordinar comandos concurrentes por perfil | Agente, Operador tecnico | CLI, Daemon local, Storage local |
+| `FL-AUD-01` | Auditar ejecución local sin secretos | Agente, Operador tecnico | CLI, Auditoría JSONL |
 
 ### Estados, eventos y ownership
 
@@ -123,6 +135,8 @@ sequenceDiagram
 - Timeout esperando respuesta del bot: mitigado con `messages wait --timeout` y error tipado.
 - Selección ambigua del botón: mitigado con `button-index` prioritario y error tipado por texto duplicado.
 - Re-login innecesario o sesión inválida: mitigado con `auth status` y reutilización controlada.
+- Competencia entre proyectos por el mismo perfil: mitigado con daemon local, cola FIFO por perfil y timeout tipado `QueueTimeout`.
+- Drift operativo no diagnosticable: mitigado con eventos JSONL redacted y `audit summary`.
 
 ### Open questions
 

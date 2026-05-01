@@ -12,6 +12,8 @@ import (
 	"strings"
 	"time"
 
+	"mi-telegram-cli/internal/audit"
+	"mi-telegram-cli/internal/daemon"
 	"mi-telegram-cli/internal/output"
 	"mi-telegram-cli/internal/profile"
 	"mi-telegram-cli/internal/tg"
@@ -28,6 +30,8 @@ type Config struct {
 	Prompt               func(string) (string, error)
 	Interactive          bool
 	TerminalSupportsANSI *bool
+	BaseRoot             string
+	DaemonMode           string
 }
 
 type Executor struct {
@@ -41,6 +45,9 @@ type Executor struct {
 	prompt               func(string) (string, error)
 	interactive          bool
 	terminalSupportsANSI bool
+	auditRecorder        *audit.Recorder
+	daemonManager        *daemon.Manager
+	daemonMode           string
 }
 
 var errUnauthorizedProfile = errors.New("unauthorized profile")
@@ -92,7 +99,7 @@ func NewExecutor(cfg Config) *Executor {
 		}
 	}
 
-	return &Executor{
+	executor := &Executor{
 		store:                cfg.Store,
 		telegram:             cfg.Telegram,
 		stdin:                stdin,
@@ -103,20 +110,31 @@ func NewExecutor(cfg Config) *Executor {
 		prompt:               prompt,
 		interactive:          cfg.Interactive,
 		terminalSupportsANSI: resolveTerminalSupportsANSI(stderr, cfg.Interactive, lookupEnv, cfg.TerminalSupportsANSI),
+		daemonMode:           strings.TrimSpace(cfg.DaemonMode),
 	}
+	if cfg.BaseRoot != "" {
+		executor.auditRecorder = audit.NewRecorder(cfg.BaseRoot, now)
+		executor.daemonManager = daemon.NewManager(cfg.BaseRoot, now)
+	}
+	return executor
 }
 
 func (e *Executor) Execute(ctx context.Context, args []string) int {
+	started := e.now()
 	resp, jsonMode := e.dispatch(ctx, args)
-	if jsonMode {
-		_ = output.WriteJSON(e.stdout, resp)
-	} else {
-		_ = output.WriteHuman(e.stdout, resp)
+	if !resp.SuppressOutput {
+		if jsonMode {
+			_ = output.WriteJSON(e.stdout, resp)
+		} else {
+			_ = output.WriteHuman(e.stdout, resp)
+		}
 	}
 
 	if resp.OK {
+		e.recordAudit(args, resp, started, 0)
 		return 0
 	}
+	e.recordAudit(args, resp, started, 1)
 	return 1
 }
 
@@ -136,6 +154,10 @@ func (e *Executor) dispatch(ctx context.Context, args []string) (output.Response
 		return e.handleMessages(ctx, args[1:])
 	case "me":
 		return e.handleMe(ctx, args[1:])
+	case "daemon":
+		return e.handleDaemon(ctx, args[1:])
+	case "audit":
+		return e.handleAudit(ctx, args[1:])
 	default:
 		return e.errorResponse("", "InvalidInput", "unknown command"), false
 	}
@@ -211,14 +233,57 @@ func (e *Executor) profileProtectedResponse(profileID string) output.Response {
 	return e.errorResponse(profileID, "ProfileProtected", profileProtectedMessage)
 }
 
-func (e *Executor) withProfileLock(profileID string, jsonMode bool, fn func() output.Response) (output.Response, bool) {
-	lock, err := e.store.AcquireLock(profileID)
+func (e *Executor) withProfileLock(profileID string, jsonMode bool, queueTimeout time.Duration, fn func() output.Response) (output.Response, bool) {
+	lock, queueMs, err := e.acquireProfileLock(profileID, queueTimeout)
 	if err != nil {
 		return e.mapStoreError(profileID, err), jsonMode
 	}
 	defer func() { _ = lock.Release() }()
 
-	return fn(), jsonMode
+	resp := fn()
+	resp.QueueMs = queueMs.Milliseconds()
+	return resp, jsonMode
+}
+
+func (e *Executor) acquireProfileLock(profileID string, queueTimeout time.Duration) (*profile.Lock, time.Duration, error) {
+	mode := e.effectiveDaemonMode()
+	if mode == "off" || e.daemonManager == nil {
+		lock, err := e.store.AcquireLock(profileID)
+		return lock, 0, err
+	}
+
+	if _, running, err := e.daemonManager.EnsureStarted(); err != nil || !running {
+		if mode == "required" {
+			if err == nil {
+				err = daemon.ErrUnavailable
+			}
+			return nil, 0, err
+		}
+	}
+
+	return e.store.AcquireQueuedLock(profileID, queueTimeout)
+}
+
+func (e *Executor) effectiveDaemonMode() string {
+	if e.daemonMode != "" {
+		return strings.ToLower(e.daemonMode)
+	}
+	if raw, ok := e.lookupEnv("MI_TELEGRAM_CLI_DAEMON"); ok && strings.TrimSpace(raw) != "" {
+		return strings.ToLower(strings.TrimSpace(raw))
+	}
+	return "off"
+}
+
+func (e *Executor) defaultQueueTimeout() time.Duration {
+	raw, ok := e.lookupEnv("MI_TELEGRAM_CLI_QUEUE_TIMEOUT_SECONDS")
+	if !ok || strings.TrimSpace(raw) == "" {
+		return 120 * time.Second
+	}
+	seconds, err := strconv.Atoi(strings.TrimSpace(raw))
+	if err != nil || seconds < 0 {
+		return 120 * time.Second
+	}
+	return time.Duration(seconds) * time.Second
 }
 
 func (e *Executor) promptValue(label string, current string) (string, error) {
@@ -246,6 +311,14 @@ func (e *Executor) mapStoreError(profileID string, err error) output.Response {
 		return e.errorResponse(profileID, "ProfileNotFound", err.Error())
 	case errors.Is(err, profile.ErrProfileLocked):
 		return e.errorResponse(profileID, "ProfileLocked", err.Error())
+	case errors.Is(err, profile.ErrQueueTimeout):
+		return e.errorResponse(profileID, "QueueTimeout", err.Error())
+	case errors.Is(err, profile.ErrDaemonLeaseDenied):
+		return e.errorResponse(profileID, "DaemonLeaseDenied", err.Error())
+	case errors.Is(err, profile.ErrDaemonLeaseExpired):
+		return e.errorResponse(profileID, "DaemonLeaseExpired", err.Error())
+	case errors.Is(err, daemon.ErrUnavailable):
+		return e.errorResponse(profileID, "DaemonUnavailable", err.Error())
 	default:
 		return e.errorResponse(profileID, "LocalStorageFailure", err.Error())
 	}
@@ -267,6 +340,17 @@ func newFlagSet(name string) *flag.FlagSet {
 	fs := flag.NewFlagSet(name, flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
 	return fs
+}
+
+func queueTimeoutFlag(fs *flag.FlagSet, defaultValue time.Duration) *int {
+	return fs.Int("queue-timeout", int(defaultValue.Seconds()), "")
+}
+
+func durationFromSeconds(v int) time.Duration {
+	if v < 0 {
+		return -1
+	}
+	return time.Duration(v) * time.Second
 }
 
 func flagProvided(fs *flag.FlagSet, name string) bool {

@@ -12,7 +12,7 @@ Validar el smoke E2E shell-driven desde una skill sobre el CLI.
 | `TP-SKL-004` | `RF-SKL-001` | Repo consumidor sin `tmp/smoke-*` | la skill usa comandos directos del CLI |
 | `TP-SKL-005` | `RF-SKL-001` | `mi-telegram-cli` fuera de `PATH` pero resoluble | la skill continúa con ruta absoluta o bootstrap |
 | `TP-SKL-006` | `RF-SKL-001` | Windows usa `pwsh` y peers `@...` quoted | el peer llega intacto al CLI y el recipe sigue siendo ejecutable |
-| `TP-SKL-007` | `RF-SKL-001` | Otra operación ya tomó el perfil | `Failed` por `ProfileLocked` sin paralelizar más comandos sobre ese perfil |
+| `TP-SKL-007` | `RF-SKL-001` | Otra operación ocupa la cola del perfil | `Failed` por `QueueTimeout` si vence el presupuesto |
 | `TP-SKL-008` | `RF-SKL-001` | Login interactivo requiere terminal visible | la skill entrega un comando local al operador y no asume una ventana visible lanzada por el agente |
 | `TP-SKL-009` | `RF-SKL-001` | Smoke cross-account entre dos perfiles dedicados | intercambio correlacionado exitoso y evidencia para ambas cuentas |
 | `TP-SKL-010` | `RF-SKL-001` | El bot devuelve botones inline | la skill inspecciona `buttons[]` y elige un selector estable |

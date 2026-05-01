@@ -10,7 +10,7 @@ El éxito del MVP se mide por su capacidad de ejecutar de forma repetible el smo
 - Aislamiento fuerte entre cuentas para evitar contaminación de QA y mezcla de identidades.
 - Superficie CLI estable y automatizable desde skills, sin acoplarse a un MCP específico.
 - Enfoque explícito en QA conversacional real sobre bots, no en scraping ni uso humano interactivo general más allá del bootstrap mínimo de autenticación.
-- Base técnica extensible para crecer luego a media, adjuntos, daemon local o más capacidades.
+- Base técnica extensible para operar media, adjuntos, daemon local coordinador y más capacidades.
 
 ## 3. Mapa de capacidades
 
@@ -45,6 +45,8 @@ mindmap
     Control local de datos
       Storage por perfil
       Locks por perfil
+      Cola daemon por perfil
+      Auditoria JSONL
       Sin dependencia MCP
 ```
 
@@ -67,13 +69,15 @@ mindmap
 | Dialogos y resolucion de peer | Descubrir el dialogo objetivo y resolver username/chat id/dialog id a un peer utilizable. |
 | Operacion de mensajes | Leer mensajes recientes con metadata de adjuntos y botones inline, enviar texto, enviar una foto local validada (jpg/jpeg/png/webp, <= 10 MiB) con caption opcional, esperar un reply enriquecido, presionar botones inline compatibles y marcar como leido. |
 | Integracion con agentes | Proveer comandos y salida estructurada para skills de Codex/Claude sin MCP propio. |
+| Coordinacion local concurrente | Daemon local de usuario, auto-start opcional y cola FIFO por perfil para evitar `ProfileLocked` entre proyectos sin duplicar sesiones. |
+| Auditoria operativa | Eventos JSONL diarios y summary local con latencias, cola, perfil, operación y errores, sin guardar cuerpos de mensajes ni secretos. |
 
 ## 6. Fuera de alcance / Evolucion futura
 
 - Descarga local de adjuntos o export de binarios a disco.
 - Accionar botones que requieran abrir WebView, navegador externo, compartir telefono/ubicacion, o confirmar identidad con password/SRP.
 - Interfaz grafica o experiencia de usuario interactiva rica para humanos fuera del bootstrap minimo de auth en terminal.
-- Daemon persistente o scheduler local de larga vida.
+- Scheduler local de larga vida, admin UI o endpoint remoto del daemon.
 - Importacion de sesiones desde Telegram Desktop (`tdesktop`) en el MVP.
 - Servidor MCP propio para la v1.
 - Automatizacion genérica de toda la superficie Telegram fuera del foco QA conversacional.

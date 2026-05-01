@@ -15,7 +15,9 @@ Prefer the CLI over any Telegram MCP when the goal is local control of sessions,
 - Use dedicated QA accounts only, never personal accounts.
 - Keep Telegram logic in the CLI; the skill should only orchestrate shell commands.
 - Do not assume the current workspace is the `mi-telegram-cli` source repo. This skill must work from other projects too.
-- Never run commands concurrently against the same profile. Even `auth status`, `me`, `dialogs list`, or `messages read` can hit `ProfileLocked` while another operation is still active.
+- Prefer the default daemon-backed path for concurrent work. Commands against the same profile are serialized by the local daemon FIFO queue; commands against different profiles can run independently.
+- Use `--queue-timeout <seconds>` or `MI_TELEGRAM_CLI_QUEUE_TIMEOUT_SECONDS` when a smoke has a tighter budget. If the queue expires before execution, treat `QueueTimeout` as a coordination failure, not as a Telegram failure.
+- Set `MI_TELEGRAM_CLI_DAEMON=off` only when you explicitly need legacy direct mode; then `ProfileLocked` can still appear while another operation is active. Set `required` when daemon coordination is mandatory.
 - If `mi-telegram-cli` is not on `PATH`, that is not a blocker by itself. First try a known absolute path or bootstrap the binary from the source repo before considering MCP fallback.
 - If the binary is missing, bootstrap it from this repo instead of falling back to an MCP, unless the user explicitly asks for MCP fallback.
 - On Windows, prefer `pwsh` over `powershell`. Some environments expose only PowerShell 7, and `powershell.exe` may be absent from `PATH`.
@@ -43,7 +45,7 @@ Prefer the CLI over any Telegram MCP when the goal is local control of sessions,
 6. Resolve the target bot or dialog.
    In PowerShell, quote peer values such as `"@target_bot"`.
 7. Send text, inspect `attachments[]` / `buttons[]`, press inline buttons when needed, wait for reply, and optionally mark the chat as read.
-   Keep each profile's commands serial; do not parallelize reads or status checks on the same profile.
+   The daemon queue serializes each profile, so same-profile concurrency should fail as `QueueTimeout` only when the wait budget is exhausted.
 
 Repo-local smoke helpers exist for both Windows and Linux:
 
@@ -60,6 +62,8 @@ If the current workspace is not the `mi-telegram-cli` source repo and those scri
 - `me`
 - `dialogs list|mark-read`
 - `messages read|send|send-photo|wait|press-button`
+- `daemon start|stop|status`
+- `audit export|summary`
 
 Use `--json` for any agent-driven flow except `auth login --method qr`, which is terminal-interactive by design.
 Even though humans may omit `--method` in an interactive TTY, agent-driven flows should keep `--method` explicit.
@@ -83,6 +87,8 @@ When this skill is used inside another project:
 - Use `buttons[].index` as the canonical selector when the flow requires `messages press-button`; use `button-text` only as fallback.
 - Treat `attachments[]` and `buttons[]` as observational metadata; this skill should not assume downloads or generic UI taps exist unless the CLI explicitly exposes them.
 - Treat `WaitTimeout`, `PeerAmbiguous`, and `UnauthorizedProfile` as first-class failures.
+- Treat `QueueTimeout`, `DaemonUnavailable`, `DaemonLeaseDenied`, and `DaemonLeaseExpired` as first-class coordination failures.
+- Use `audit summary --json --errors-only` to diagnose repeated profile contention or daemon failures before rerunning a live Telegram smoke.
 - Do not persist or echo secrets, auth codes, or session blobs in chat output.
 - `messages send-photo` returns `data.media{kind, mimeType, sizeBytes, sha256, caption?}`. The local file path is intentionally never present in `data` or in error messages; `sha256` is the local fingerprint of the bytes uploaded.
 - Supported photo types: `jpg`, `jpeg`, `png`, `webp`. Cap: 10 MiB per file. Caption: up to 1024 characters, plain text (no parse mode).

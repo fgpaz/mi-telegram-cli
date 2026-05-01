@@ -3,6 +3,7 @@ package profile_test
 import (
 	"errors"
 	"path/filepath"
+	"sync"
 	"testing"
 	"time"
 
@@ -11,6 +12,93 @@ import (
 
 func fixedNow() time.Time {
 	return time.Date(2026, 4, 2, 12, 0, 0, 0, time.UTC)
+}
+
+func TestStoreQueuedLockWaitsForActiveLock(t *testing.T) {
+	root := t.TempDir()
+	store := profile.NewStore(root, fixedNow)
+	if _, err := store.Create("qa-dev", "QA Dev", ""); err != nil {
+		t.Fatalf("Create() error = %v", err)
+	}
+
+	first, _, err := store.AcquireQueuedLock("qa-dev", time.Second)
+	if err != nil {
+		t.Fatalf("AcquireQueuedLock() first error = %v", err)
+	}
+
+	var wg sync.WaitGroup
+	wg.Add(1)
+	acquired := make(chan error, 1)
+	go func() {
+		defer wg.Done()
+		second, _, err := store.AcquireQueuedLock("qa-dev", time.Second)
+		if err == nil {
+			_ = second.Release()
+		}
+		acquired <- err
+	}()
+
+	time.Sleep(50 * time.Millisecond)
+	if err := first.Release(); err != nil {
+		t.Fatalf("Release() error = %v", err)
+	}
+	wg.Wait()
+
+	if err := <-acquired; err != nil {
+		t.Fatalf("second AcquireQueuedLock() error = %v", err)
+	}
+}
+
+func TestStoreQueuedLockTimeout(t *testing.T) {
+	root := t.TempDir()
+	store := profile.NewStore(root, fixedNow)
+	if _, err := store.Create("qa-dev", "QA Dev", ""); err != nil {
+		t.Fatalf("Create() error = %v", err)
+	}
+
+	first, err := store.AcquireLock("qa-dev")
+	if err != nil {
+		t.Fatalf("AcquireLock() error = %v", err)
+	}
+	defer func() { _ = first.Release() }()
+
+	if _, _, err := store.AcquireQueuedLock("qa-dev", 30*time.Millisecond); !errors.Is(err, profile.ErrQueueTimeout) {
+		t.Fatalf("AcquireQueuedLock() error = %v, want ErrQueueTimeout", err)
+	}
+}
+
+func TestStoreLeaseAcquireReleaseAndExpiry(t *testing.T) {
+	now := fixedNow()
+	store := profile.NewStore(t.TempDir(), func() time.Time { return now })
+	if _, err := store.Create("qa-dev", "QA Dev", ""); err != nil {
+		t.Fatalf("Create() error = %v", err)
+	}
+
+	lease, err := store.AcquireLease("qa-dev", "auth login", time.Minute)
+	if err != nil {
+		t.Fatalf("AcquireLease() error = %v", err)
+	}
+	if _, err := store.AcquireLease("qa-dev", "auth login", time.Minute); !errors.Is(err, profile.ErrDaemonLeaseDenied) {
+		t.Fatalf("AcquireLease() denied error = %v, want ErrDaemonLeaseDenied", err)
+	}
+	if err := lease.Release(); err != nil {
+		t.Fatalf("Release() error = %v", err)
+	}
+	if lease, err := store.AcquireLease("qa-dev", "auth login", time.Minute); err != nil {
+		t.Fatalf("AcquireLease() after release error = %v", err)
+	} else {
+		_ = lease.Release()
+	}
+
+	if _, err := store.AcquireLease("qa-dev", "auth login", time.Minute); err != nil {
+		t.Fatalf("AcquireLease() before expiry setup error = %v", err)
+	}
+	now = now.Add(2 * time.Minute)
+	if lease, err := store.AcquireLease("qa-dev", "auth login", time.Minute); err != nil {
+		t.Fatalf("AcquireLease() after expiry error = %v", err)
+	} else {
+		_ = lease.Release()
+	}
 }
 
 func TestStoreLifecycleAndAuthProjection(t *testing.T) {
@@ -36,10 +124,10 @@ func TestStoreLifecycleAndAuthProjection(t *testing.T) {
 	}
 
 	if err := store.SaveAuthState(profile.AuthState{
-		ProfileID:            "qa-dev",
+		ProfileID:           "qa-dev",
 		AuthorizationStatus: profile.AuthorizationAuthorized,
-		AuthorizedAtUTC:      ptrTime(fixedNow()),
-		LastCheckedAtUTC:     ptrTime(fixedNow()),
+		AuthorizedAtUTC:     ptrTime(fixedNow()),
+		LastCheckedAtUTC:    ptrTime(fixedNow()),
 	}); err != nil {
 		t.Fatalf("SaveAuthState() error = %v", err)
 	}

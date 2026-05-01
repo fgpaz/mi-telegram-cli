@@ -7,10 +7,12 @@ import (
 )
 
 type Response struct {
-	OK      bool           `json:"ok"`
-	Profile string         `json:"profile"`
-	Data    map[string]any `json:"data"`
-	Error   *ResponseError `json:"error"`
+	OK             bool           `json:"ok"`
+	Profile        string         `json:"profile"`
+	Data           map[string]any `json:"data"`
+	Error          *ResponseError `json:"error"`
+	QueueMs        int64          `json:"queueMs,omitempty"`
+	SuppressOutput bool           `json:"-"`
 }
 
 type ResponseError struct {

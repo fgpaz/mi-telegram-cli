@@ -19,6 +19,11 @@
 | `messages send-photo` | `--profile`, `--peer`, `--file`, `--caption` opcional | foto enviada con metadata derivada (`media{kind,mimeType,sizeBytes,sha256,caption?}`) |
 | `messages wait` | `--profile`, `--peer`, `--after-id`, `--timeout` | reply enriquecido observado o timeout |
 | `messages press-button` | `--profile`, `--peer`, `--message-id`, `--button-index` o `--button-text` | callback ejecutado o URL informada |
+| `daemon start` | sin input requerido | daemon local iniciado o ya activo |
+| `daemon status` | sin input requerido | estado local del daemon |
+| `daemon stop` | sin input requerido | daemon detenido |
+| `audit export` | filtros opcionales `--since`, `--profile`, `--operation`, `--errors-only` | eventos JSONL redacted |
+| `audit summary` | filtros opcionales y `--json` | resumen por operación, perfil y proyecto |
 
 ## 1.1 Flags publicos comunes
 
@@ -32,6 +37,7 @@
 - `--caption`: texto opcional adjunto a la foto en `messages send-photo`; máximo 1024 caracteres; sin parse mode.
 - `--method`: selector de login visible para `auth login`; valores `code` o `qr`.
 - `--timeout`: timeout total visible para `auth login --method qr` y `messages wait`.
+- `--queue-timeout`: timeout de espera FIFO antes de ejecutar comandos daemon-routed; default 120s.
 - Si `auth login` se ejecuta sin `--method` en una terminal interactiva, el CLI solicita `QR` o `Phone + code`; fuera de TTY usa `code`.
 - Si `auth login` se ejecuta sin `--method` pero ya incluye `--json`, `--phone`, `--code` o `--password`, el CLI infiere `code` y omite el prompt.
 - En `auth login` por codigo, el CLI emite primero `SendCode` a Telegram y solo despues consume `--code` o el prompt interactivo correspondiente.
@@ -51,6 +57,10 @@
 | `ProfileDeletionBlocked` | Baja insegura sin `force` |
 | `ProfileNotFound` | Perfil inexistente |
 | `ProfileLocked` | Perfil en uso por otra operación |
+| `QueueTimeout` | La cola FIFO venció antes de ejecutar el comando |
+| `DaemonUnavailable` | El daemon requerido no está disponible |
+| `DaemonLeaseDenied` | Existe una lease activa incompatible para el perfil |
+| `DaemonLeaseExpired` | La lease interactiva expiró antes de completarse |
 | `UnauthorizedProfile` | Perfil sin sesión válida |
 | `InvalidInput` | Flags, valores o configuracion runtime invalida |
 | `InvalidVerificationCode` | Código de login rechazado |
@@ -99,7 +109,8 @@ Notas operativas de shell:
 - `messages read` y `messages wait` exponen `attachments[]` y `buttons[]` en cada `MensajeResumen`.
 - `messages press-button` prioriza `--button-index` si también llega `--button-text`.
 - Los botones URL devuelven `action=url` y la URL visible, pero el CLI no abre navegador ni WebView.
-- `ProfileLocked` puede aparecer incluso en `auth status`, `me`, `dialogs list` o `messages read` si otra invocación ya abrió el mismo perfil; la compatibilidad para skills exige una sola secuencia activa por perfil.
+- En modo daemon `auto`, los comandos `auth status/logout`, `me`, `dialogs *` y `messages *` esperan en cola por perfil en vez de fallar inmediatamente con `ProfileLocked`.
+- `MI_TELEGRAM_CLI_DAEMON=off` conserva modo directo y puede devolver `ProfileLocked`; `MI_TELEGRAM_CLI_DAEMON=required` devuelve `DaemonUnavailable` si la coordinación no está disponible.
 - `messages send-photo` valida el archivo local **antes** de tocar Telegram (existencia, no directorio, tamaño 1..10485760 bytes, extensión soportada) y nunca expone el `filePath` original en `data` ni en mensajes de error. La metadata observable es `data.media{kind,mimeType,sizeBytes,sha256,caption?}`.
 - Guard cross-cutting `qa-alt`: el perfil `qa-alt` es estado de usuario real protegido. Los subcomandos modificadores (`auth login`, `auth logout`, `dialogs mark-read`, `messages send`, `messages send-photo`, `messages press-button`) responden `ProfileProtected` cuando reciben `--profile qa-alt`. Las lecturas (`auth status`, `me`, `dialogs list`, `messages read`, `messages wait`) siguen permitidas para inspección humana.
 - Si `auth login --method qr` o el flujo por código requiere interacción visible del operador, el patrón compatible es delegar un comando local `pwsh -File ...` o `mi-telegram-cli auth login ...`.

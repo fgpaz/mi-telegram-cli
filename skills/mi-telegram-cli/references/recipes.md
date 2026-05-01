@@ -73,7 +73,7 @@ Preconditions:
 
 1. both profiles are already authorized
 2. each account can resolve the other by exact username or an existing dialog
-3. commands remain serial per profile
+3. commands use the daemon FIFO queue per profile; set `--queue-timeout` when the smoke has a strict budget
 
 Example shape:
 
@@ -151,7 +151,8 @@ Never continue after `PeerAmbiguous` without narrowing the target.
 ## Failure Handling
 
 - `UnauthorizedProfile`: stop and re-run `auth status` or `auth login`
-- `ProfileLocked`: another command is already using the same profile; this includes benign checks such as `auth status` or `me`; wait, narrow to one active shell per profile, and retry
+- `QueueTimeout`: the daemon FIFO queue did not reach execution before the configured wait budget; inspect `audit summary --json --errors-only`, then retry or widen `--queue-timeout`
+- `ProfileLocked`: legacy/direct mode (`MI_TELEGRAM_CLI_DAEMON=off`) found another command using the same profile; wait, narrow to one active shell per profile, and retry
 - `auth login --method qr`: use only from a real terminal; it is interactive and does not support `--json`
 - `AuthQrTimeout`: rerun `auth login --method qr` and rescan before the timeout window closes
 - `PeerNotFound`: inspect `dialogs list`

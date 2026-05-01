@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 	"time"
 )
 
@@ -15,6 +16,9 @@ var (
 	ErrProfileAlreadyExists = errors.New("profile already exists")
 	ErrProfileNotFound      = errors.New("profile not found")
 	ErrProfileLocked        = errors.New("profile locked")
+	ErrQueueTimeout         = errors.New("queue timeout")
+	ErrDaemonLeaseDenied    = errors.New("daemon lease denied")
+	ErrDaemonLeaseExpired   = errors.New("daemon lease expired")
 )
 
 type AuthorizationStatus string
@@ -60,13 +64,30 @@ type lockMetadata struct {
 	AcquiredAtUTC time.Time `json:"acquiredAtUtc"`
 }
 
+type leaseMetadata struct {
+	ProfileID     string    `json:"profileId"`
+	PID           int       `json:"pid"`
+	Operation     string    `json:"operation"`
+	LeaseID       string    `json:"leaseId"`
+	AcquiredAtUTC time.Time `json:"acquiredAtUtc"`
+	ExpiresAtUTC  time.Time `json:"expiresAtUtc"`
+}
+
 type Store struct {
 	baseRoot string
 	now      func() time.Time
 }
 
 type Lock struct {
-	path string
+	path       string
+	queuePath  string
+	acquiredAt time.Time
+}
+
+type Lease struct {
+	path  string
+	id    string
+	store *Store
 }
 
 func NewStore(baseRoot string, now func() time.Time) *Store {
@@ -278,7 +299,154 @@ func (s *Store) AcquireLock(id string) (*Lock, error) {
 		return nil, err
 	}
 
-	return &Lock{path: path}, nil
+	return &Lock{path: path, acquiredAt: s.now()}, nil
+}
+
+func (s *Store) AcquireQueuedLock(id string, timeout time.Duration) (*Lock, time.Duration, error) {
+	if timeout <= 0 {
+		lock, err := s.AcquireLock(id)
+		return lock, 0, err
+	}
+	if _, err := s.readProfile(id); err != nil {
+		return nil, 0, err
+	}
+
+	start := s.now()
+	queuePath, err := s.createQueueTicket(id, start)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	deadline := time.Now().Add(timeout)
+	for {
+		first, err := s.isFirstQueueTicket(id, queuePath)
+		if err != nil {
+			_ = os.Remove(queuePath)
+			return nil, 0, err
+		}
+		if first {
+			lock, err := s.AcquireLock(id)
+			if err == nil {
+				lock.queuePath = queuePath
+				return lock, s.now().Sub(start), nil
+			}
+			if !errors.Is(err, ErrProfileLocked) {
+				_ = os.Remove(queuePath)
+				return nil, 0, err
+			}
+		}
+		if time.Now().After(deadline) {
+			_ = os.Remove(queuePath)
+			return nil, s.now().Sub(start), ErrQueueTimeout
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+}
+
+func (s *Store) AcquireLease(id, operation string, ttl time.Duration) (*Lease, error) {
+	if _, err := s.readProfile(id); err != nil {
+		return nil, err
+	}
+	if ttl <= 0 {
+		return nil, fmt.Errorf("lease ttl must be greater than zero")
+	}
+
+	path := filepath.Join(s.profileRoot(id, ""), "lease.json")
+	now := s.now()
+	if err := s.removeExpiredLease(path, now); err != nil {
+		return nil, err
+	}
+
+	file, err := os.OpenFile(path, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
+	if err != nil {
+		if errors.Is(err, fs.ErrExist) {
+			return nil, ErrDaemonLeaseDenied
+		}
+		return nil, err
+	}
+	defer file.Close()
+
+	leaseID := fmt.Sprintf("%d-%d", now.UnixNano(), os.Getpid())
+	payload, err := json.Marshal(leaseMetadata{
+		ProfileID:     id,
+		PID:           os.Getpid(),
+		Operation:     strings.TrimSpace(operation),
+		LeaseID:       leaseID,
+		AcquiredAtUTC: now,
+		ExpiresAtUTC:  now.Add(ttl),
+	})
+	if err != nil {
+		_ = os.Remove(path)
+		return nil, err
+	}
+	if _, err := file.Write(payload); err != nil {
+		_ = os.Remove(path)
+		return nil, err
+	}
+
+	return &Lease{path: path, id: leaseID, store: s}, nil
+}
+
+func (s *Store) createQueueTicket(id string, now time.Time) (string, error) {
+	dir := filepath.Join(s.profileRoot(id, ""), "queue")
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return "", err
+	}
+	for attempt := 0; attempt < 1000; attempt++ {
+		name := fmt.Sprintf("%020d-%06d-%03d.ticket", now.UnixNano(), os.Getpid(), attempt)
+		path := filepath.Join(dir, name)
+		file, err := os.OpenFile(path, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
+		if err != nil {
+			if errors.Is(err, fs.ErrExist) {
+				continue
+			}
+			return "", err
+		}
+		_, writeErr := fmt.Fprintf(file, `{"profileId":%q,"pid":%d,"createdAtUtc":%q}`, id, os.Getpid(), now.Format(time.RFC3339Nano))
+		closeErr := file.Close()
+		if writeErr != nil {
+			_ = os.Remove(path)
+			return "", writeErr
+		}
+		if closeErr != nil {
+			_ = os.Remove(path)
+			return "", closeErr
+		}
+		return path, nil
+	}
+	return "", fmt.Errorf("failed to allocate queue ticket")
+}
+
+func (s *Store) isFirstQueueTicket(id, ticketPath string) (bool, error) {
+	dir := filepath.Join(s.profileRoot(id, ""), "queue")
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return false, err
+	}
+	ticketName := filepath.Base(ticketPath)
+	names := make([]string, 0, len(entries))
+	for _, entry := range entries {
+		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".ticket") {
+			continue
+		}
+		names = append(names, entry.Name())
+	}
+	sort.Strings(names)
+	return len(names) > 0 && names[0] == ticketName, nil
+}
+
+func (s *Store) removeExpiredLease(path string, now time.Time) error {
+	var current leaseMetadata
+	if err := readJSON(path, &current); err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			return nil
+		}
+		return err
+	}
+	if now.After(current.ExpiresAtUTC) {
+		return os.Remove(path)
+	}
+	return nil
 }
 
 func (l *Lock) Release() error {
@@ -286,6 +454,22 @@ func (l *Lock) Release() error {
 		return nil
 	}
 
+	err := os.Remove(l.path)
+	if errors.Is(err, fs.ErrNotExist) {
+		err = nil
+	}
+	if l.queuePath != "" {
+		if queueErr := os.Remove(l.queuePath); err == nil && queueErr != nil && !errors.Is(queueErr, fs.ErrNotExist) {
+			err = queueErr
+		}
+	}
+	return err
+}
+
+func (l *Lease) Release() error {
+	if l == nil || l.path == "" {
+		return nil
+	}
 	err := os.Remove(l.path)
 	if errors.Is(err, fs.ErrNotExist) {
 		return nil

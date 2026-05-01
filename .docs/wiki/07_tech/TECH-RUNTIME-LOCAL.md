@@ -3,10 +3,11 @@
 ## 1. Topologia operativa
 
 - `mi-telegram-cli` se ejecuta como proceso corto por comando.
-- Cada invocación carga un perfil, toma lock, ejecuta la operación y libera lock.
+- En modo daemon `auto` o `required`, cada invocación Telegram coordina con el daemon local antes de tomar lock.
+- Cada invocación carga un perfil, espera su turno FIFO, toma lock, ejecuta la operación y libera lock.
 - `messages wait` mantiene el proceso abierto solo hasta completar reply o timeout.
 - `auth login --method qr` puede mantener el proceso abierto hasta aceptar el QR o agotar su timeout total.
-- La espera se resuelve dentro del mismo proceso mediante observación acotada del historial reciente del peer; no se documenta un listener persistente.
+- La espera se resuelve dentro del mismo proceso mediante observación acotada del historial reciente del peer; no se documenta un listener MTProto persistente.
 - Cuando `auth login --method qr` emite refresh de token, el CLI intenta reescribir el mismo bloque del QR si la terminal soporta control ANSI/cursor; en caso contrario agrega el nuevo bloque en append seguro.
 
 ## 2. Directorio por perfil
@@ -21,6 +22,8 @@ Contenido esperado:
 - estado de autorización
 - sesión MTProto derivada
 - lock operativo
+- tickets de cola por perfil
+- lease de login interactivo
 - cursor de lectura si se persiste
 
 ## 2.1 Configuracion de runtime
@@ -40,6 +43,7 @@ Reglas:
 
 - Un proceso no debe abrir dos perfiles en la misma invocación.
 - Un lock activo bloquea operaciones concurrentes incompatibles.
+- En modo daemon, el lock activo no falla inmediatamente: el ticket FIFO espera hasta `--queue-timeout` y recién entonces devuelve `QueueTimeout`.
 - La eliminación de perfil debe invalidar sesión y metadata asociada.
 
 ## 4. Operaciones largas

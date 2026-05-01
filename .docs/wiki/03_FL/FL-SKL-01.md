@@ -58,7 +58,7 @@ sequenceDiagram
 | Perfil no autorizado | La skill falla temprano |
 | Peer no resuelto | La skill aborta con error accionable |
 | Timeout de reply | La skill reporta falla de smoke |
-| Perfil ocupado por otra operación | La skill mantiene serialización por perfil o devuelve un fallo accionable por lock |
+| Perfil ocupado por otra operación | La skill usa cola FIFO por perfil o devuelve un fallo accionable por `QueueTimeout` |
 | Login interactivo necesita una terminal visible | La skill delega un comando local al operador antes de continuar |
 | Host Windows sin `powershell.exe` utilizable | La skill usa `pwsh` o un comando local equivalente |
 
@@ -85,7 +85,7 @@ Skill local + CLI + Adaptador Telegram.
 | Uso desde repos consumidores | La skill no asume `tmp/smoke-*` ni el repo fuente como workspace activo. |
 | El smoke requiera botones inline | La skill inspecciona `buttons[]` y usa `messages press-button` con selector explícito. |
 | `@peer` mal interpretado por PowerShell | La skill quotea peers `@...` antes de invocar el CLI. |
-| `ProfileLocked` por concurrencia accidental | Cada perfil mantiene una sola secuencia activa de comandos, incluso para checks locales. |
+| `QueueTimeout` por concurrencia sostenida | La cola FIFO no llegó a ejecutar dentro del presupuesto configurado. |
 | Login interactivo no visible desde una terminal lanzada por el agente | La skill usa handoff local con `pwsh -File ...` o un comando directo del CLI. |
 | Smoke cruzado entre dos cuentas | Se usa una cuenta dedicada por perfil y se correlaciona el intercambio con un token compartido. |
 

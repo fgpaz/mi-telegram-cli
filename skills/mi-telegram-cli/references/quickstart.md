@@ -175,5 +175,5 @@ bash ./tmp/smoke-bot.sh --peer "@target_bot"
 - Use dedicated Telegram test accounts only.
 - Never reuse one profile across different test identities.
 - Prefer repo scripts or skills to supply dynamic test inputs such as pairing codes.
-- Keep commands serial per profile; avoid parallel `status`, `me`, `read`, or `send` calls against the same profile.
+- Default daemon mode serializes commands per profile with a FIFO queue. Use `--queue-timeout` for bounded waits, and expect `QueueTimeout` if the command never reaches execution.
 - When the bot exposes inline buttons, inspect `buttons[]` first and prefer `button-index` for `messages press-button`.

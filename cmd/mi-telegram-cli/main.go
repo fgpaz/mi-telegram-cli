@@ -35,9 +35,18 @@ func main() {
 		Stderr:      os.Stderr,
 		Now:         time.Now().UTC,
 		Interactive: isInteractive(os.Stdin),
+		BaseRoot:    baseRoot,
+		DaemonMode:  defaultDaemonMode(),
 	})
 
 	os.Exit(executor.Execute(context.Background(), os.Args[1:]))
+}
+
+func defaultDaemonMode() string {
+	if value := os.Getenv("MI_TELEGRAM_CLI_DAEMON"); value != "" {
+		return value
+	}
+	return "auto"
 }
 
 func defaultBaseRoot() (string, error) {
@@ -100,8 +109,13 @@ func printUsage(w io.Writer) {
 	_, _ = fmt.Fprintln(w, "  messages send-photo --profile <id> --peer <query> --file <path> [--caption <value>]")
 	_, _ = fmt.Fprintln(w, "  messages wait --profile <id> --peer <query> [--after-id <id>] --timeout <1..300>")
 	_, _ = fmt.Fprintln(w, "  messages press-button --profile <id> --peer <query> --message-id <id> (--button-index <n> | --button-text <value>)")
+	_, _ = fmt.Fprintln(w, "  daemon start|stop|status")
+	_, _ = fmt.Fprintln(w, "  audit export [--since <rfc3339>] [--profile <id>] [--operation <name>] [--errors-only]")
+	_, _ = fmt.Fprintln(w, "  audit summary [--json] [--since <rfc3339>] [--profile <id>] [--operation <name>] [--errors-only]")
 	_, _ = fmt.Fprintln(w, "")
 	_, _ = fmt.Fprintln(w, "Environment:")
 	_, _ = fmt.Fprintln(w, "  MI_TELEGRAM_API_ID")
 	_, _ = fmt.Fprintln(w, "  MI_TELEGRAM_API_HASH")
+	_, _ = fmt.Fprintln(w, "  MI_TELEGRAM_CLI_DAEMON=auto|off|required")
+	_, _ = fmt.Fprintln(w, "  MI_TELEGRAM_CLI_QUEUE_TIMEOUT_SECONDS")
 }

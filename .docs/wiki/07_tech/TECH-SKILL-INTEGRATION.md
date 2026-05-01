@@ -19,7 +19,7 @@ La integración debe funcionar tanto desde el repo fuente como desde repos consu
 - La skill solo inspecciona docs/config del repo consumidor cuando hace falta encontrar el bot, peer o pairing del caso bajo prueba.
 - En Windows, la skill prefiere `pwsh` para wrappers locales, scripts y handoff interactivo visible; no asume `powershell.exe` en `PATH`.
 - En PowerShell, peers `@username` o `@bot` se pasan quoted para evitar reinterpretación del shell.
-- La skill mantiene una sola secuencia activa por perfil; incluso `auth status`, `me`, `dialogs list` o `messages read` pueden devolver `ProfileLocked` si compiten por el mismo lock.
+- La skill usa por defecto la cola FIFO del daemon por perfil; `QueueTimeout` es el fallo accionable cuando la espera vence antes de ejecutar.
 - Cuando el operador debe ver QR, código o password en una terminal visible, la skill delega un comando local `pwsh -File ...` o un comando directo del CLI antes de continuar.
 - El smoke cross-account es válido como recipe operacional siempre que use dos perfiles dedicados y mantenga serialización independiente por perfil con un token compartido de correlación.
 

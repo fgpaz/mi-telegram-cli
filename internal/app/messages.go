@@ -52,19 +52,21 @@ func (e *Executor) handleMessages(ctx context.Context, args []string) (output.Re
 		limit := fs.Int("limit", 20, "")
 		afterID := fs.Int64("after-id", 0, "")
 		jsonMode := fs.Bool("json", false, "")
+		queueTimeoutSeconds := queueTimeoutFlag(fs, e.defaultQueueTimeout())
 		if err := fs.Parse(args[1:]); err != nil {
 			return e.errorResponse("", "InvalidInput", err.Error()), true
 		}
 		if *profileID == "" || strings.TrimSpace(*peerQuery) == "" || *limit < 1 || *limit > 100 || *afterID < 0 {
 			return e.errorResponse(*profileID, "InvalidInput", "invalid profile, peer, limit or after-id"), *jsonMode
 		}
-		return e.executeRead(ctx, *profileID, *peerQuery, *limit, *afterID, *jsonMode)
+		return e.executeRead(ctx, *profileID, *peerQuery, *limit, *afterID, *jsonMode, durationFromSeconds(*queueTimeoutSeconds))
 	case "send":
 		fs := newFlagSet("messages send")
 		profileID := fs.String("profile", "", "")
 		peerQuery := fs.String("peer", "", "")
 		text := fs.String("text", "", "")
 		jsonMode := fs.Bool("json", false, "")
+		queueTimeoutSeconds := queueTimeoutFlag(fs, e.defaultQueueTimeout())
 		if err := fs.Parse(args[1:]); err != nil {
 			return e.errorResponse("", "InvalidInput", err.Error()), true
 		}
@@ -77,7 +79,7 @@ func (e *Executor) handleMessages(ctx context.Context, args []string) (output.Re
 			return e.profileProtectedResponse(*profileID), *jsonMode
 		}
 		e.maybeWarnMSYSPathTranslation(trimmedText, *jsonMode)
-		return e.executeSend(ctx, *profileID, trimmedPeerQuery, trimmedText, *jsonMode)
+		return e.executeSend(ctx, *profileID, trimmedPeerQuery, trimmedText, *jsonMode, durationFromSeconds(*queueTimeoutSeconds))
 	case "send-photo":
 		fs := newFlagSet("messages send-photo")
 		profileID := fs.String("profile", "", "")
@@ -85,6 +87,7 @@ func (e *Executor) handleMessages(ctx context.Context, args []string) (output.Re
 		filePath := fs.String("file", "", "")
 		caption := fs.String("caption", "", "")
 		jsonMode := fs.Bool("json", false, "")
+		queueTimeoutSeconds := queueTimeoutFlag(fs, e.defaultQueueTimeout())
 		if err := fs.Parse(args[1:]); err != nil {
 			return e.errorResponse("", "InvalidInput", err.Error()), true
 		}
@@ -99,7 +102,7 @@ func (e *Executor) handleMessages(ctx context.Context, args []string) (output.Re
 		if e.isProtectedProfileForAutomation(*profileID) {
 			return e.profileProtectedResponse(*profileID), *jsonMode
 		}
-		return e.executeSendPhoto(ctx, *profileID, trimmedPeerQuery, trimmedFilePath, *caption, *jsonMode)
+		return e.executeSendPhoto(ctx, *profileID, trimmedPeerQuery, trimmedFilePath, *caption, *jsonMode, durationFromSeconds(*queueTimeoutSeconds))
 	case "wait":
 		fs := newFlagSet("messages wait")
 		profileID := fs.String("profile", "", "")
@@ -107,13 +110,14 @@ func (e *Executor) handleMessages(ctx context.Context, args []string) (output.Re
 		afterID := fs.Int64("after-id", 0, "")
 		timeoutSeconds := fs.Int("timeout", 0, "")
 		jsonMode := fs.Bool("json", false, "")
+		queueTimeoutSeconds := queueTimeoutFlag(fs, e.defaultQueueTimeout())
 		if err := fs.Parse(args[1:]); err != nil {
 			return e.errorResponse("", "InvalidInput", err.Error()), true
 		}
 		if *profileID == "" || strings.TrimSpace(*peerQuery) == "" || *timeoutSeconds < 1 || *timeoutSeconds > 300 || *afterID < 0 {
 			return e.errorResponse(*profileID, "InvalidInput", "invalid profile, peer, after-id or timeout"), *jsonMode
 		}
-		return e.executeWait(ctx, *profileID, *peerQuery, *afterID, time.Duration(*timeoutSeconds)*time.Second, *jsonMode)
+		return e.executeWait(ctx, *profileID, *peerQuery, *afterID, time.Duration(*timeoutSeconds)*time.Second, *jsonMode, durationFromSeconds(*queueTimeoutSeconds))
 	case "press-button":
 		fs := newFlagSet("messages press-button")
 		profileID := fs.String("profile", "", "")
@@ -122,6 +126,7 @@ func (e *Executor) handleMessages(ctx context.Context, args []string) (output.Re
 		buttonIndex := fs.Int("button-index", 0, "")
 		buttonText := fs.String("button-text", "", "")
 		jsonMode := fs.Bool("json", false, "")
+		queueTimeoutSeconds := queueTimeoutFlag(fs, e.defaultQueueTimeout())
 		if err := fs.Parse(args[1:]); err != nil {
 			return e.errorResponse("", "InvalidInput", err.Error()), true
 		}
@@ -135,14 +140,17 @@ func (e *Executor) handleMessages(ctx context.Context, args []string) (output.Re
 			return e.profileProtectedResponse(*profileID), *jsonMode
 		}
 
-		return e.executePressButton(ctx, *profileID, *peerQuery, *messageID, *buttonIndex, hasButtonIndex, trimmedButtonText, *jsonMode)
+		return e.executePressButton(ctx, *profileID, *peerQuery, *messageID, *buttonIndex, hasButtonIndex, trimmedButtonText, *jsonMode, durationFromSeconds(*queueTimeoutSeconds))
 	default:
 		return e.errorResponse("", "InvalidInput", "unknown messages subcommand"), false
 	}
 }
 
-func (e *Executor) executeRead(ctx context.Context, profileID, peerQuery string, limit int, afterID int64, jsonMode bool) (output.Response, bool) {
-	return e.withProfileLock(profileID, jsonMode, func() output.Response {
+func (e *Executor) executeRead(ctx context.Context, profileID, peerQuery string, limit int, afterID int64, jsonMode bool, queueTimeout time.Duration) (output.Response, bool) {
+	if queueTimeout < 0 {
+		return e.errorResponse(profileID, "InvalidInput", "queue-timeout must be zero or greater"), jsonMode
+	}
+	return e.withProfileLock(profileID, jsonMode, queueTimeout, func() output.Response {
 		runtimeConfig, err := e.requireTelegramConfig()
 		if err != nil {
 			return e.errorResponse(profileID, "InvalidInput", err.Error())
@@ -182,8 +190,11 @@ func (e *Executor) executeRead(ctx context.Context, profileID, peerQuery string,
 	})
 }
 
-func (e *Executor) executeSend(ctx context.Context, profileID, peerQuery, text string, jsonMode bool) (output.Response, bool) {
-	return e.withProfileLock(profileID, jsonMode, func() output.Response {
+func (e *Executor) executeSend(ctx context.Context, profileID, peerQuery, text string, jsonMode bool, queueTimeout time.Duration) (output.Response, bool) {
+	if queueTimeout < 0 {
+		return e.errorResponse(profileID, "InvalidInput", "queue-timeout must be zero or greater"), jsonMode
+	}
+	return e.withProfileLock(profileID, jsonMode, queueTimeout, func() output.Response {
 		runtimeConfig, err := e.requireTelegramConfig()
 		if err != nil {
 			return e.errorResponse(profileID, "InvalidInput", err.Error())
@@ -222,13 +233,16 @@ func (e *Executor) executeSend(ctx context.Context, profileID, peerQuery, text s
 	})
 }
 
-func (e *Executor) executeSendPhoto(ctx context.Context, profileID, peerQuery, filePath, caption string, jsonMode bool) (output.Response, bool) {
+func (e *Executor) executeSendPhoto(ctx context.Context, profileID, peerQuery, filePath, caption string, jsonMode bool, queueTimeout time.Duration) (output.Response, bool) {
+	if queueTimeout < 0 {
+		return e.errorResponse(profileID, "InvalidInput", "queue-timeout must be zero or greater"), jsonMode
+	}
 	info, photoErr := validateLocalImage(filePath)
 	if photoErr != nil {
 		return e.errorResponse(profileID, photoErr.Code, photoErr.Message), jsonMode
 	}
 
-	return e.withProfileLock(profileID, jsonMode, func() output.Response {
+	return e.withProfileLock(profileID, jsonMode, queueTimeout, func() output.Response {
 		runtimeConfig, err := e.requireTelegramConfig()
 		if err != nil {
 			return e.errorResponse(profileID, "InvalidInput", err.Error())
@@ -377,8 +391,11 @@ func looksLikeMSYSPathTranslatedText(text string) bool {
 	return false
 }
 
-func (e *Executor) executeWait(ctx context.Context, profileID, peerQuery string, afterID int64, timeout time.Duration, jsonMode bool) (output.Response, bool) {
-	return e.withProfileLock(profileID, jsonMode, func() output.Response {
+func (e *Executor) executeWait(ctx context.Context, profileID, peerQuery string, afterID int64, timeout time.Duration, jsonMode bool, queueTimeout time.Duration) (output.Response, bool) {
+	if queueTimeout < 0 {
+		return e.errorResponse(profileID, "InvalidInput", "queue-timeout must be zero or greater"), jsonMode
+	}
+	return e.withProfileLock(profileID, jsonMode, queueTimeout, func() output.Response {
 		runtimeConfig, err := e.requireTelegramConfig()
 		if err != nil {
 			return e.errorResponse(profileID, "InvalidInput", err.Error())
@@ -421,8 +438,11 @@ func (e *Executor) executeWait(ctx context.Context, profileID, peerQuery string,
 	})
 }
 
-func (e *Executor) executePressButton(ctx context.Context, profileID, peerQuery string, messageID int64, buttonIndex int, hasButtonIndex bool, buttonText string, jsonMode bool) (output.Response, bool) {
-	return e.withProfileLock(profileID, jsonMode, func() output.Response {
+func (e *Executor) executePressButton(ctx context.Context, profileID, peerQuery string, messageID int64, buttonIndex int, hasButtonIndex bool, buttonText string, jsonMode bool, queueTimeout time.Duration) (output.Response, bool) {
+	if queueTimeout < 0 {
+		return e.errorResponse(profileID, "InvalidInput", "queue-timeout must be zero or greater"), jsonMode
+	}
+	return e.withProfileLock(profileID, jsonMode, queueTimeout, func() output.Response {
 		runtimeConfig, err := e.requireTelegramConfig()
 		if err != nil {
 			return e.errorResponse(profileID, "InvalidInput", err.Error())

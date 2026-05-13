@@ -12,4 +12,4 @@ Validar discovery de diálogos y resolución inequívoca de peers.
 | `TP-DLG-004` | `RF-DLG-002` | Resolución inequívoca | `PeerObjetivo` único |
 | `TP-DLG-005` | `RF-DLG-002` | Peer inexistente | `PeerNotFound` |
 | `TP-DLG-006` | `RF-DLG-002` | Peer ambiguo | `PeerAmbiguous` |
-
+| `TP-DLG-007` | `RF-DLG-002` | Username resoluble fuera de dialogs locales | `PeerObjetivo` único por resolución global MTProto |

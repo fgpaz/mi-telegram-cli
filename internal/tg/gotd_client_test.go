@@ -1,10 +1,76 @@
 package tg
 
 import (
+	"errors"
 	"testing"
 
 	gtraw "github.com/gotd/td/tg"
 )
+
+func TestPeerFromResolvedUsernameMapsBotUser(t *testing.T) {
+	peer, err := peerFromResolvedUsername(&gtraw.ContactsResolvedPeer{
+		Peer: &gtraw.PeerUser{UserID: 42},
+		Users: []gtraw.UserClass{
+			&gtraw.User{
+				ID:         42,
+				AccessHash: 99,
+				Bot:        true,
+				FirstName:  "Lab",
+				Username:   "lab_bot",
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("peerFromResolvedUsername() error = %v, want nil", err)
+	}
+	if peer.Kind != "bot" || peer.ID != 42 || peer.Username != "lab_bot" || peer.DisplayName != "Lab" {
+		t.Fatalf("peerFromResolvedUsername() = %+v, want bot user summary", peer)
+	}
+	inputPeer, ok := peer.Resolved.(*gtraw.InputPeerUser)
+	if !ok {
+		t.Fatalf("peer.Resolved = %T, want *InputPeerUser", peer.Resolved)
+	}
+	if inputPeer.UserID != 42 || inputPeer.AccessHash != 99 {
+		t.Fatalf("input peer = %+v, want user_id/access_hash from resolved user", inputPeer)
+	}
+}
+
+func TestPeerFromResolvedUsernameMapsChannel(t *testing.T) {
+	peer, err := peerFromResolvedUsername(&gtraw.ContactsResolvedPeer{
+		Peer: &gtraw.PeerChannel{ChannelID: 77},
+		Chats: []gtraw.ChatClass{
+			&gtraw.Channel{
+				ID:         77,
+				AccessHash: 88,
+				Broadcast:  true,
+				Title:      "Updates",
+				Username:   "updates",
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("peerFromResolvedUsername() error = %v, want nil", err)
+	}
+	if peer.Kind != "channel" || peer.ID != 77 || peer.Username != "updates" || peer.DisplayName != "Updates" {
+		t.Fatalf("peerFromResolvedUsername() = %+v, want channel summary", peer)
+	}
+	inputPeer, ok := peer.Resolved.(*gtraw.InputPeerChannel)
+	if !ok {
+		t.Fatalf("peer.Resolved = %T, want *InputPeerChannel", peer.Resolved)
+	}
+	if inputPeer.ChannelID != 77 || inputPeer.AccessHash != 88 {
+		t.Fatalf("input peer = %+v, want channel_id/access_hash from resolved channel", inputPeer)
+	}
+}
+
+func TestPeerFromResolvedUsernameMissingEntity(t *testing.T) {
+	_, err := peerFromResolvedUsername(&gtraw.ContactsResolvedPeer{
+		Peer: &gtraw.PeerUser{UserID: 42},
+	})
+	if !errors.Is(err, ErrPeerNotFound) {
+		t.Fatalf("peerFromResolvedUsername() error = %v, want ErrPeerNotFound", err)
+	}
+}
 
 func TestMessageSummaryFromClassIncludesAttachmentsAndButtons(t *testing.T) {
 	message := &gtraw.Message{

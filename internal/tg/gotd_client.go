@@ -259,7 +259,17 @@ func (c *GotdClient) ResolvePeer(ctx context.Context, runtime RuntimeConfig, ses
 		return Peer{}, err
 	}
 
-	return resolvePeerFromCandidates(req.Query, candidates)
+	peer, err := resolvePeerFromCandidates(req.Query, candidates)
+	if err == nil || !errors.Is(err, ErrPeerNotFound) {
+		return peer, err
+	}
+
+	handle := normalizeHandle(req.Query)
+	if handle == "" {
+		return Peer{}, ErrPeerNotFound
+	}
+
+	return c.resolvePeerByUsername(ctx, runtime, sessionRef, handle)
 }
 
 func (c *GotdClient) ReadMessages(ctx context.Context, runtime RuntimeConfig, sessionRef SessionRef, req ReadMessagesRequest) ([]MessageSummary, error) {
@@ -638,6 +648,79 @@ func candidateFromDialog(elem gotddialogs.Elem) (dialogCandidate, bool) {
 	default:
 		return dialogCandidate{}, false
 	}
+}
+
+func (c *GotdClient) resolvePeerByUsername(ctx context.Context, runtime RuntimeConfig, sessionRef SessionRef, handle string) (Peer, error) {
+	var peer Peer
+	err := c.withAuthorizedClient(ctx, runtime, sessionRef, func(runCtx context.Context, _ *gotdtelegram.Client, api *gtraw.Client, _ *gtraw.User) error {
+		resolved, err := api.ContactsResolveUsername(runCtx, &gtraw.ContactsResolveUsernameRequest{Username: handle})
+		if err != nil {
+			if gtraw.IsUsernameInvalid(err) || gtraw.IsUsernameNotOccupied(err) {
+				return ErrPeerNotFound
+			}
+			return err
+		}
+
+		peer, err = peerFromResolvedUsername(resolved)
+		return err
+	})
+	if err != nil {
+		return Peer{}, err
+	}
+	return peer, nil
+}
+
+func peerFromResolvedUsername(resolved *gtraw.ContactsResolvedPeer) (Peer, error) {
+	if resolved == nil || resolved.Peer == nil {
+		return Peer{}, ErrPeerNotFound
+	}
+
+	switch rawPeer := resolved.Peer.(type) {
+	case *gtraw.PeerUser:
+		for _, userClass := range resolved.Users {
+			user, ok := userClass.(*gtraw.User)
+			if !ok || user.ID != rawPeer.UserID {
+				continue
+			}
+			kind := "user"
+			if user.Bot {
+				kind = "bot"
+			}
+			return Peer{
+				ID:          user.ID,
+				Kind:        kind,
+				DisplayName: userDisplayName(user),
+				Username:    user.Username,
+				Resolved: &gtraw.InputPeerUser{
+					UserID:     user.ID,
+					AccessHash: user.AccessHash,
+				},
+			}, nil
+		}
+	case *gtraw.PeerChannel:
+		for _, chatClass := range resolved.Chats {
+			channel, ok := chatClass.(*gtraw.Channel)
+			if !ok || channel.ID != rawPeer.ChannelID {
+				continue
+			}
+			kind := "group"
+			if channel.Broadcast {
+				kind = "channel"
+			}
+			return Peer{
+				ID:          channel.ID,
+				Kind:        kind,
+				DisplayName: strings.TrimSpace(channel.Title),
+				Username:    channel.Username,
+				Resolved: &gtraw.InputPeerChannel{
+					ChannelID:  channel.ID,
+					AccessHash: channel.AccessHash,
+				},
+			}, nil
+		}
+	}
+
+	return Peer{}, ErrPeerNotFound
 }
 
 func resolvePeerFromCandidates(query string, candidates []dialogCandidate) (Peer, error) {

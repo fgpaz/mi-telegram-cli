@@ -12,7 +12,7 @@
 | `RF-AUT-003` | `TP-AUT` | `TP-AUT-007..009` |
 | `RF-AUT-004` | `TP-AUT` | `TP-AUT-010..012` |
 | `RF-DLG-001` | `TP-DLG` | `TP-DLG-001..003` |
-| `RF-DLG-002` | `TP-DLG` | `TP-DLG-004..006` |
+| `RF-DLG-002` | `TP-DLG` | `TP-DLG-004..007` |
 | `RF-MSG-001` | `TP-MSG` | `TP-MSG-001..003,020..021` |
 | `RF-MSG-002` | `TP-MSG` | `TP-MSG-004..006,031` |
 | `RF-MSG-003` | `TP-MSG` | `TP-MSG-007..009,022` |

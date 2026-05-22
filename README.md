@@ -48,22 +48,27 @@ Symptoms:
 
 Supported workarounds:
 
-1. Inline for one command:
+1. **Inline for a single invocation** — disables path translation for that call only (preferred for ad-hoc tests):
 
 ```bash
 MSYS_NO_PATHCONV=1 mi-telegram-cli messages send --profile qa-dev --peer "@SomeBot_bot" --text "/start <token>"
 ```
 
-2. Export it in Git Bash scripts before calling the CLI:
+2. **Switch to `pwsh`** — PowerShell does not rewrite slash-leading arguments, so the problem disappears entirely on Windows with PowerShell 7+:
+
+```powershell
+mi-telegram-cli messages send --profile qa-dev --peer "@SomeBot_bot" --text "/start <token>"
+```
+
+3. **Export in scripts** — add `export MSYS_NO_PATHCONV=1` near the top of any Bash script that sends leading-slash text so every call in the script inherits the exemption:
 
 ```bash
 export MSYS_NO_PATHCONV=1
+mi-telegram-cli messages send --profile qa-dev --peer "@SomeBot_bot" --text "/start <token>"
 ```
-
-3. Use `pwsh` instead of Git Bash on Windows. PowerShell does not rewrite slash-leading arguments.
 
 Notes:
 
-- This affects any text payload that must begin with a literal `/`, including `/start`, `/help`, `/pair`, or a POSIX-style path sent verbatim in chat text.
-- `tmp/smoke-bot.sh` already exports `MSYS_NO_PATHCONV=1` to protect Git Bash runs from this rewrite.
+- This affects any text payload that must begin with a literal `/`, including `/start`, `/help`, `/pair`, or a POSIX-style path sent verbatim in chat text. It does not affect `--peer` values, `--profile` ids, or non-leading slashes (`foo/bar`).
+- When reproducing a bot command flow from Git Bash, always verify the outgoing text via `messages read ... --json` before blaming the bot or the webhook — the rewrite happens client-side and is invisible until you round-trip the payload.
 - Direct human-mode `messages send` calls may print a one-line warning on suspicious rewritten prefixes to help diagnose this quickly.

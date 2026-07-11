@@ -4,11 +4,11 @@
 
 For every non-trivial task in this repository:
 
-1. Run `$ps-contexto` first.
-2. Run `$brainstorming` once after context load when there is any open product, contract, data, or architecture decision.
+1. Run `$ae-work` first.
+2. Run `$ae-decide` once after context load when there is any open product, contract, data, or architecture decision.
 3. Treat `.docs/wiki/01-09` as the mandatory canon before implementation.
 4. If the task changes documentation policy, update `AGENTS.md` and `CLAUDE.md` together using `$ps-crear-agentsclaudemd`.
-5. Close non-trivial tasks with `$ps-trazabilidad`.
+5. Close non-trivial tasks with `$ae-close`.
 
 Additional strict rules:
 

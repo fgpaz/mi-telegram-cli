@@ -29,8 +29,9 @@
 1. El CLI recibe `peerQuery`.
 2. Consulta la colección de diálogos resolubles para el perfil.
 3. Intenta resolver por username, chat id o dialog id.
-4. Si encuentra un único match, construye `PeerObjetivo`.
-5. Devuelve el peer resuelto al comando consumidor.
+4. Si no hay match local y `peerQuery` es un username/handle, intenta resolucion global MTProto por username.
+5. Si encuentra un único match, construye `PeerObjetivo`.
+6. Devuelve el peer resuelto al comando consumidor.
 
 ## 5. Outputs
 
@@ -52,6 +53,7 @@
 ## 7. Special Cases and Variants
 
 - La resolución por `dialog id` gana sobre búsqueda textual exacta.
+- La resolucion global por username solo corre despues de no encontrar match en dialogos locales y no aplica a busquedas vagas por nombre visible.
 - La resolución nunca selecciona arbitrariamente uno de varios matches.
 
 ## 8. Data Model Impact
@@ -73,6 +75,13 @@ Scenario: peer ambiguo
   And existen múltiples diálogos que matchean "tedi"
   When el agente usa "tedi" como peerQuery
   Then el CLI responde ok=false con code PeerAmbiguous
+
+Scenario: username resoluble fuera de dialogs locales
+  Given el perfil "qa-dev" esta autorizado
+  And el username "@nuevo_bot_lab" existe en Telegram
+  And el bot todavia no aparece en dialogs list del perfil
+  When el agente usa "@nuevo_bot_lab" como peerQuery
+  Then el CLI resuelve un PeerObjetivo unico mediante resolucion global por username
 ```
 
 ## 10. Test Traceability
@@ -82,9 +91,9 @@ Scenario: peer ambiguo
 | `TP-DLG-004` | resolución inequívoca |
 | `TP-DLG-005` | no encontrado |
 | `TP-DLG-006` | ambiguo |
+| `TP-DLG-007` | username global fuera de dialogs locales |
 
 ## 11. No Ambiguities Left
 
 - La resolución es requisito previo para leer, enviar, esperar o marcar leído.
 - La ambigüedad no se resuelve silenciosamente.
-

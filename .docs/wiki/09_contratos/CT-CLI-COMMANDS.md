@@ -33,6 +33,7 @@
 ## 1.1 Flags publicos comunes
 
 - `--profile`: identificador estable del perfil local. En comandos Telegram es opcional; si falta, el CLI resuelve por binding de proyecto y luego fallback `qa-dev`.
+- `--peer`: query de peer para `dialogs mark-read` y `messages *`; cuando llega como `@username` o username exacto, la resolución puede usar `contacts.resolveUsername` si el peer no aparece todavía en `dialogs list`.
 - `--json`: fuerza el envelope estructurado `{ ok, profile, data, error }`.
 - `--after-id`: cursor publico para `messages read` y `messages wait`; mapea al campo semantico `afterMessageId` documentado en RF.
 - `--message-id`: identificador público del mensaje que contiene el botón inline.

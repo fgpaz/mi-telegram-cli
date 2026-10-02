@@ -1,3 +1,5 @@
 creation_rules:
   - path_regex: .*infra[\\/]+\.env$
-    age: age1dqg4eyvkxcrcsk576gq70qfawmaj5r08hh2nlkvgrwegywlpuf9sp8sv22
+    age: >-
+      age1dqg4eyvkxcrcsk576gq70qfawmaj5r08hh2nlkvgrwegywlpuf9sp8sv22,
+      age1wvtqvmxtnxee7g7krk74u6vdv77ckxdycpxrmtf95aa4lfs49qwqyh445r

@@ -1,158 +1,149 @@
-# mi-telegram-cli Agent Policy
+# CLAUDE.md — mi-telegram-cli Agentic Engineering Policy
 
-## 1. Workflow Rules
+> **Authority**: .docs/wiki/02_arquitectura.md + AE-KERNEL-V2.md. **Language**: English. L0 operating policy for mi-telegram-cli.
 
-For every non-trivial task in this repository:
+## North Star Cycle
 
-1. Run `$ae-work` first.
-2. Run `$ae-decide` once after context load when there is any open product, contract, data, or architecture decision.
-3. Treat `.docs/wiki/01-09` as the mandatory canon before implementation.
-4. If the task changes documentation policy, update `AGENTS.md` and `CLAUDE.md` together using `$ps-crear-agentsclaudemd`.
-5. Close non-trivial tasks with `$ae-close`.
+Wiki is the only source of truth.
 
-Additional strict rules:
+1. **Context** — wiki anchor + mi-lsp implication graph + architecture decisions from wiki: query live at decision boundaries; never reuse a context snapshot.
+2. **Build** — gate-free; implement **all** code/docs for the goal (no C2 tests/builds/lints). Lanes are not completion.
+3. **IMPLEMENTATION_COMPLETE** — parent only, when `implementation_frontier` is green and writers are idle.
+4. **Verify once** — single FINAL_VERIFY wave (build/tests/impact map); not per lane. FAST local: collapsed `verify_packet`.
+5. **Wiki close** — update wiki if drift. Drift is wiki vs shipped behavior, not omitted `.docs/wiki` files. Product-visible shipped work without RS/FL/RF/TP/TECH coverage is drift; FAST still runs `ps-asistente-wiki` plus targeted `ps-trazabilidad` then `ps-auditar-trazabilidad` at FAST depth when that drift exists or the operator asked for ciclo AE / `full_cycle_to_origin_main`. Collapsed `verify_packet` compresses C2; it does not replace wiki routing or FAST-depth trace/audit. Skip targeted wiki+trace only for mechanical no-wiki-impact diffs (typo/format/no user-visible behavior). Do not wait to be re-asked.
+6. **Full cycle default** — verify_packet (collapsed or full trace/audit) → close drifts → pre-push → integrate `origin/main` → **always** sanitize deprecated branches/worktrees → learning route (`ps-wiki-aprendizaje` only with pilot/qa inputs; else friction/skipped_fast). Next session: `ps-contexto` reentry of last classification + open friction (do not re-ask).
 
-- Use `crear-alcance`, `crear-arquitectura`, `crear-flujo`, `crear-modelo-de-datos`, `crear-capa-tecnica-wiki`, and `crear-requerimiento` for their matching layers only.
-- Do not implement code that changes visible behavior, CLI contracts, states, or storage assumptions without reviewing the affected docs in `.docs/wiki/01-09`.
-- If future work introduces UX/UI canon, use the hardened numbered canon directly; if legacy UX/UI paths ever appear, stop and run `$ps-migrar-canon-uxui` before downstream UX/UI work.
+## Chief of Staff (strict)
 
-## 2. Canonical Source of Truth
+The principal session is **Chief of Staff**, not a leaf implementer.
 
-Documentation root:
+- **Principal does**: understand intent, prioritize, route (`mi-lsp skills plan` when multi-skill), launch leaves, monitor, join via anti-C2 contract, decide, stitch compact results, **own goal phase** (`BUILDING` → `IMPLEMENTATION_COMPLETE` → `FINAL_VERIFY`) and **session-state** index.
+- **Leaves do**: read, edit within bounded scope; report `lane_implementation_done` with paths only; **no** C2 validation, no phase change, no subdelegation, push, deploy, or final closure.
+- **Join ≠ FINAL_VERIFY** at leaf **or** axis/child-orchestrator: never run build/test/lint when a lane or sub-orchestrator finishes (locked A). Parent rejects joins with C2 evidence (`accept-join`).
+- **C2 deferred** until goal-root IMPLEMENTATION_COMPLETE unless the operator **explicitly** requests a bounded intermediate check (B = ALLOW_SPOT; never hard-block the operator for asking).
+- **Same-repo FAST (1–few files, reversible)**: almost-zero ceremony — no preflight ritual, no session-contract required. Principal may implement directly only when isolation/fan-out cost exceeds value.
+- **Non-trivial / multi-file / multi-axis**: launch leaves; do not expand the principal into full implementation.
+- Leaf dispatch is ROI-positive: spawn when separable ownership and expected value beat orchestration cost. Adapter availability alone never forces a worker.
+- If spawn is blocked: announce owner_surface + rule + how_to_unblock. Silent multi-axis parent-implement is forbidden.
+- `writing-plans` is for orchestrator→leaf task packets only, not a human-facing ceremony.
+- **Operator-facing language**: answer what the operator asked first, in their language and words; name lanes by what they do ("the lane fixing compaction"), never by pane/lane/test codes alone; orchestration detail (screens, statuses, watchers, retries) only on request. A lane — herdr, another session or an in-harness subagent — is reported as goal, stage and result.
 
-- `.docs/wiki/`
+## Context rules (ps-contexto)
 
-Functional truth:
+- **Flujos** = mi-lsp implication graph around the task (`nav flow-slice`, `change-pack`, `related`, `neighbors`, `affected`, `explain-change`) — not wiki `FL-*` alone.
+- Load **architecture decisions** from the wiki; never re-decide or forget locks already documented.
+- Route-first mi-lsp: prefer `nav batch` + `nav multi-read`; depth `policy` for kernel/skill-only (skip product/UX/negocio gates).
+- Session SoT: goal intent + selectors/scope locks + locked decisions + goal-phase. Graph topology/bindings/readiness are queried live at boundaries, never stored as session SoT.
 
-- `.docs/wiki/01_alcance_funcional.md`
-- `.docs/wiki/02_arquitectura.md`
-- `.docs/wiki/03_FL.md`
-- `.docs/wiki/03_FL/`
-- `.docs/wiki/04_RF.md`
-- `.docs/wiki/04_RF/`
-- `.docs/wiki/05_modelo_datos.md`
-- `.docs/wiki/06_matriz_pruebas_RF.md`
-- `.docs/wiki/06_pruebas/`
+## Native context entry and four mi-lsp modes
 
-Technical truth:
+For every real work task, enter through the native `ps-contexto` and `mi-lsp` skills and actually invoke the tool; skill availability or a text mention is not tool-use evidence. The native harness owns invocation, lifecycle, and monitoring. `ps-contexto` obtains the minimum useful cheap bounded live context (wiki anchor and decisions, scope locks, and a small implication slice), then supplies exact follow-up queries for implementation. Greetings, status chat, and repeated literal getters do not restart a full workflow; no full-wiki/status/governance preflight is required for every task.
 
-- `.docs/wiki/07_baseline_tecnica.md`
-- `.docs/wiki/07_tech/`
-- `.docs/wiki/08_modelo_fisico_datos.md`
-- `.docs/wiki/08_db/`
-- `.docs/wiki/09_contratos_tecnicos.md`
-- `.docs/wiki/09_contratos/`
+Preferred commands only:
+- **Goal-shaped navigation** starts with `mi-lsp nav intent "<goal>"`.
+  - Follow the exact `continuation.next` command when it is emitted.
+  - Use the exact `expansions[].command` when an expansion is requested, preserving its reason.
+- **Literal non-goal operations** remain direct:
+  - `mi-lsp nav wiki <query>` for canonical wiki/document operations.
+  - `mi-lsp nav route <task>` for a literal route request.
+  - `mi-lsp nav search <pattern>` for a literal text/search request.
+- Follow the returned bounded continuation before widening a query; do not invent a broader command.
 
-Skill source of truth:
+Allowed fallback codes are exactly:
+- `unsupported_operation`
+- `unavailable_binary`
+- `invalid_workspace`
+- `explicit_incomplete`
 
-- `skills/mi-telegram-cli/`
+Fallback requires one visible `reason_code` from this list and a separate bounded detail; do not use a generic fallback chain.
+Goal-shaped requests start with cheap `mi-lsp nav intent "<goal>"` discovery, then consume the exact emitted `continuation.next`, `expansions[].command`, or literal supported executable `next_queries` values when emitted; these field names are not an exclusive whitelist. Inspect actual returned values; do not execute query terms or derive commands from prose. Do not invent a closed follow-up operation whitelist. Literal named mi-lsp/wiki/code commands go direct. Select the smallest applicable mode:
 
-Policy docs:
+1. **Canonical wiki** — read governed wiki roots and architecture decisions; wiki remains the authority.
+2. **General linked documentation/knowledge ("Obsidian-like")** — follow existing map, root, and linked metadata; do not fabricate SDD/RS requirements or promote notes to canon.
+3. **LSP/code graphs** — use LSP symbols and references plus graph callers, callees, and tests; do not eagerly load the full graph.
+4. **Combined bidirectional traversal** — traverse either direction through existing `wiki_code_context` lanes, keeping the node/link set bounded.
 
-- `AGENTS.md`
-- `CLAUDE.md`
+Readers follow bounded nodes and links, not repeated broad `rg` scans. Preserve typed fallback reasons and honest `unavailable`/`partial` results; distinguish candidates, declared bindings, and observed runtime data; surface stale graph state; and retain documented boundaries and wiki architecture locks. If mi-lsp is unavailable, use the existing fallback path only with that typed reason and no invented command or public API.
 
-## 3. Skill Distribution Policy
+A real invocation must produce runtime evidence only through existing native invocation plus mi-lsp session/operation evidence; do not add a recorder, fabricate savings, rewrite directives with tool regexes, or make a mandatory hook. After implementation, the goal owner performs one goal-level wiki drift check and owns any meaningful wiki update (no-op writes are forbidden), then `ps-trazabilidad`, then the independent read-only `ps-auditar-trazabilidad`. Keep one owner skill at a time, no per-leaf tests/audits, no second full-suite authorization, and no automatic push or deletion authority.
 
-The canonical editable skill lives in:
+## FAST same-repo ceremony (almost zero)
 
-- `skills/mi-telegram-cli/`
+- No mandatory session-contract for same-repo FAST.
+- No mandatory preflight suite for local reversible work.
+- Pre-push minimum: `.\infra\git\Invoke-PrePushGuard.ps1 -CollaborationMode solo` (secrets scan + main ancestry + no force-push path).
+- Escalate ceremony only for multi-axis work, live/runtime, secrets, external side effects, or explicit HOLD.
+- **Completion default** remains full cycle to `origin/main` + **always** sanitize deprecated worktrees/branches unless the operator says local-only. No HOLD whose only message is “please integrate/clean yourself”. Leaving known-deprecated artifacts is incomplete.
+- FAST close uses **collapsed verify_packet** (not two full trace+audit tours of the same evidence).
 
-The global Codex install lives in:
+## Kernel Fast Runtime v3
 
-- `C:\Users\fgpaz\.codex\skills\mi-telegram-cli`
-
-The external mirror lives in:
-
-- `C:\repos\buho\assets\skills\mi-telegram-cli`
-
-The mirrored binary lives in:
-
-- `C:\repos\buho\assets\skills\mi-telegram-cli\bin\mi-telegram-cli.exe`
-
-Mandatory rule:
-
-- If the repo-local skill changes and the task also updates or reinstalls the global copy under `C:\Users\fgpaz\.codex\skills\mi-telegram-cli`, update the mirror under `C:\repos\buho\assets\skills\mi-telegram-cli` in the same task.
-- If the task rebuilds or redistributes `mi-telegram-cli.exe`, update the mirrored binary under `C:\repos\buho\assets\skills\mi-telegram-cli\bin\mi-telegram-cli.exe` in the same task.
-- Do not leave drift between the repo skill, the global installed copy, and the `C:\repos\buho\assets\skills` mirror once a global update happened.
-- If updating the mirror requires permissions outside the current workspace, request approval instead of silently skipping the sync.
-
-## 4. Documentation Synchronization Rule
-
-When product objective, scope boundary, or MVP limits change:
-
-- review/update `.docs/wiki/01_alcance_funcional.md`
-
-When architecture, decision priority, runtime model, or system boundaries change:
-
-- review/update `.docs/wiki/02_arquitectura.md`
-- review/update `.docs/wiki/07_baseline_tecnica.md`
-- review/update affected `TECH-*`
-
-When actors, flow ownership, sequence, or risk mitigation change:
-
-- review/update `.docs/wiki/03_FL.md`
-- review/update affected `FL-*`
-
-When CLI commands, typed inputs/outputs, errors, or smoke behavior change:
-
-- review/update `.docs/wiki/04_RF.md`
-- review/update affected `RF-*`
-- review/update `.docs/wiki/06_matriz_pruebas_RF.md`
-- review/update affected `TP-*`
-- review/update `.docs/wiki/09_contratos_tecnicos.md`
-- review/update affected `CT-*`
-
-When entities, invariants, persisted-vs-derived decisions, or lifecycle rules change:
-
-- review/update `.docs/wiki/05_modelo_datos.md`
-- review/update `.docs/wiki/08_modelo_fisico_datos.md`
-- review/update affected `DB-*`
-
-## 5. Artifact Hygiene Rule
-
-- Do not write ephemeral artifacts to repository root.
-- Do not leave screenshots, logs, traces, auth dumps, browser captures, or temporary exports under `.docs/wiki/` or `skills/`.
-- Use `tmp/` for disposable local scratch output when a tool needs a working directory.
-- Use `artifacts/e2e/<YYYY-MM-DD>-<task-slug>/` for task-scoped E2E evidence when evidence must be kept in the repo.
-- Prefer explicit output paths for scripts and runners whenever configurable.
-- Before closing a task, clean, relocate, or delete ephemeral outputs that are not part of the canon.
-
-## 6. Placeholder Mapping
-
-- `<DOCS_ROOT>` -> `.docs/wiki/`
-- `<ARQUITECTURA_DOC>` -> `.docs/wiki/02_arquitectura.md`
-- `<FL_INDEX_DOC>` -> `.docs/wiki/03_FL.md`
-- `<FL_DOCS_DIR>` -> `.docs/wiki/03_FL/`
-- `<RF_INDEX_DOC>` -> `.docs/wiki/04_RF.md`
-- `<RF_DOCS_DIR>` -> `.docs/wiki/04_RF/`
-- `<MODELO_DATOS_DOC>` -> `.docs/wiki/05_modelo_datos.md`
-- `<TP_INDEX_DOC>` -> `.docs/wiki/06_matriz_pruebas_RF.md`
-- `<TP_DOCS_DIR>` -> `.docs/wiki/06_pruebas/`
-- `<BASELINE_TECNICA_DOC>` -> `.docs/wiki/07_baseline_tecnica.md`
-- `<MODELO_FISICO_DOC>` -> `.docs/wiki/08_modelo_fisico_datos.md`
-- `<CONTRATOS_TECNICOS_DOC>` -> `.docs/wiki/09_contratos_tecnicos.md`
-- `<TECH_DOCS_DIR>` -> `.docs/wiki/07_tech/`
-- `<DB_DOCS_DIR>` -> `.docs/wiki/08_db/`
-- `<CONTRATOS_DOCS_DIR>` -> `.docs/wiki/09_contratos/`
-- `<SKILL_SOURCE_DIR>` -> `skills/mi-telegram-cli/`
-- `<GLOBAL_SKILL_DIR>` -> `C:\Users\fgpaz\.codex\skills\mi-telegram-cli`
-- `<SKILL_MIRROR_DIR>` -> `C:\repos\buho\assets\skills\mi-telegram-cli`
-- `<SKILL_MIRROR_BIN>` -> `C:\repos\buho\assets\skills\mi-telegram-cli\bin\mi-telegram-cli.exe`
-
-## 7. Search Playbook
-
-Use fast discovery first:
-
-```powershell
-rg --files .docs/wiki
-rg -n "FL-|RF-|TP-|TECH-|DB-|CT-|profile|auth|dialog|message|skill" .docs/wiki skills
-rg -n "mi-telegram-cli|profiles|auth|dialogs|messages|WaitTimeout|PeerAmbiguous" .docs/wiki skills
+```toon
+policy_revision: kernel-fast-governance-v4
+execution_mode: FAST
+closure_profile: governed_kernel_change
+build_loop: {tests: false, audits: false, traceability: false, evidence: false, structural_check_max_seconds: 0, c2_validation: false}
+final_verify: {count: 1, method: impact_map, fresh_verifier: required, single_wave: true, trace_audit: combined_single_pass, forbid_duplicate_evidence_tours: true}
+evidence: {mode: only_publish, packet: single_closure_packet, durable_before_publish: false}
 ```
 
-## 8. Non-Negotiables
+BUILD LOOP is gate-free. FINAL VERIFY runs once with a fresh verifier. Publish only one sanitized closure packet. External-only actions are BLOCKED without an explicit allowlist and explicit closure authorization. Completion handoff must not infer authority for commit, push, merge, remote mutation, deletion, or evidence reaping.
 
-- Keep `AGENTS.md` and `CLAUDE.md` aligned.
-- Do not change the global skill without considering the `C:\repos\buho\assets\skills` mirror.
-- Do not implement code first and retrofit `01-09` later for behavior-changing work.
-- Do not treat generated local state or Telegram session blobs as canonical documentation.
+## Project Management / Tracker Applicability
+
+Tracker mode: `none` (`local-only`).
+
+- external: selected tracker adapter owns tickets/claims/sync; never invent GraphQL or shared state vocabulary.
+- none / local-only: local session frontier + git own the workflow; no external tracker mutation; never publish tracker no-op fillers.
+- Traceability/audit/pre-push remain mode-aware and must not invent external tracker requirements in local-only mode.
+
+## Language Rule
+
+Keep `AGENTS.md`, `CLAUDE.md`, and project-local skills in English. All other project documentation is in Spanish.
+
+## Collaboration Rules
+
+**Style**: avoid emojis in policy/governance outputs. User-facing copy must preserve correct Spanish orthography.
+
+**Mandatory wrappers** (never bypass when the wrapper expresses the action):
+  - name: go-verify
+    script: go build ./... && go test ./...
+    precondition: ejecutar en la raiz del repo
+    authority: repository QA
+
+**private network precondition**: before remote or deployment operations, confirm private access to the target environment.
+
+
+## Repository-Specific Contract
+
+### Repository Description
+
+CLI en Go para QA end-user de Telegram (perfiles aislados, mensajes, adjuntos, botones inline) sin MCP.
+
+### Repository Structure Rules
+
+  - cmd/mi-telegram-cli es el entrypoint; internal/app, internal/profile e internal/tg contienen runtime, perfiles y adapter Telegram
+  - skills/mi-telegram-cli es la fuente editable de la skill; copias instaladas o espejos externos no se versionan aqui y no deben divergir
+  - .docs/wiki/01-09 es el canon obligatorio antes de cambiar comportamiento visible, contratos CLI, estados o storage
+  - tmp/ es scratch descartable; evidencia E2E con alcance de tarea va en artifacts/e2e/<fecha>-<slug>/
+  - nunca versionar sesiones de Telegram, infra/.env ni volcados de auth; solo infra/secrets.enc.env cifrado con SOPS
+
+### Mandatory Wrappers
+
+  - name: go-verify
+    script: go build ./... && go test ./...
+    precondition: ejecutar en la raiz del repo
+    authority: repository QA
+
+### QA Canon Paths
+
+  - .docs/wiki/06_matriz_pruebas_RF.md
+  - .docs/wiki/06_pruebas/
+
+---
+
+**Version**: CLAUDE.md (AE-KERNEL-V2)
+**Status**: Generated from AE-POLICY-PROJECTION-V2
+**Last Updated**: 2026-10-02
+**Source**: repo-policy.yaml + template.claude
+<!-- kernel_version: 908b4f44 -->

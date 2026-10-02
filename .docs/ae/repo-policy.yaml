@@ -1,0 +1,81 @@
+last_updated: "2026-10-02"
+schema: "ae-repo-policy/v1"
+version: 1
+required: []
+
+authority:
+  schema: "ae-authority/v1"
+  version: 1
+  model:
+    - "Kernel"
+    - "Team"
+    - "Repository"
+    - "Person"
+    - "Session"
+  kernel:
+    id: "ae-kernel"
+  team:
+    id: "local-team"
+  repository:
+    id: "mi-telegram-cli"
+  person:
+    id: "local-person"
+  session:
+    id: "local-session"
+  allowlist:
+    version: "v1"
+    paths:
+      - "CLAUDE.md"
+      - "AGENTS.md"
+      - ".docs/ae/repo-policy.yaml"
+
+repo:
+  name: "mi-telegram-cli"
+  description: "CLI en Go para QA end-user de Telegram (perfiles aislados, mensajes, adjuntos, botones inline) sin MCP."
+  structure_rules:
+    - "cmd/mi-telegram-cli es el entrypoint; internal/app, internal/profile e internal/tg contienen runtime, perfiles y adapter Telegram"
+    - "skills/mi-telegram-cli es la fuente editable de la skill; copias instaladas o espejos externos no se versionan aqui y no deben divergir"
+    - ".docs/wiki/01-09 es el canon obligatorio antes de cambiar comportamiento visible, contratos CLI, estados o storage"
+    - "tmp/ es scratch descartable; evidencia E2E con alcance de tarea va en artifacts/e2e/<fecha>-<slug>/"
+    - "nunca versionar sesiones de Telegram, infra/.env ni volcados de auth; solo infra/secrets.enc.env cifrado con SOPS"
+
+language:
+  policy_lang: "English"
+  docs_lang: "Spanish"
+
+tracker:
+  provider: "None"
+  none:
+    mode: "local-only"
+
+secrets:
+  vault: "SOPS + age (infra/secrets.enc.env)"
+  tool: "sops"
+
+wrappers:
+  - name: "go-verify"
+    script: "go build ./... && go test ./..."
+    precondition: "ejecutar en la raiz del repo"
+    authority: "repository QA"
+
+wiki:
+  layers_map:
+    "01": ".docs/wiki/01_alcance_funcional.md"
+    "02": ".docs/wiki/02_arquitectura.md"
+    "03": ".docs/wiki/03_FL.md"
+    "04": ".docs/wiki/04_RF.md"
+    "05": ".docs/wiki/05_modelo_datos.md"
+    "06": ".docs/wiki/06_matriz_pruebas_RF.md"
+    "07": ".docs/wiki/07_baseline_tecnica.md"
+    "08": ".docs/wiki/08_modelo_fisico_datos.md"
+    "09": ".docs/wiki/09_contratos_tecnicos.md"
+  workspace_alias: "mi-telegram-cli"
+  paths_file: "PATHS.md"
+
+qa:
+  canon_paths:
+    - ".docs/wiki/06_matriz_pruebas_RF.md"
+    - ".docs/wiki/06_pruebas/"
+
+subagents:
+  roster_file: "session-available-agents-only"

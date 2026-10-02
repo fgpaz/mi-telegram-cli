@@ -127,6 +127,12 @@ CLI en Go para QA end-user de Telegram (perfiles aislados, mensajes, adjuntos, b
   - .docs/wiki/01-09 es el canon obligatorio antes de cambiar comportamiento visible, contratos CLI, estados o storage
   - tmp/ es scratch descartable; evidencia E2E con alcance de tarea va en artifacts/e2e/<fecha>-<slug>/
   - nunca versionar sesiones de Telegram, infra/.env ni volcados de auth; solo infra/secrets.enc.env cifrado con SOPS
+  - no implementar primero para documentar despues: todo cambio de comportamiento visible, contratos CLI, estados o storage revisa antes los docs afectados de .docs/wiki/01-09
+  - rutas canonicas de la wiki: .docs/wiki/03_FL/ (FL-*), 04_RF/ (RF-*), 06_pruebas/ (TP-*), 07_tech/ (TECH-*), 08_db/ (DB-*) y 09_contratos/ (CT-*), mas los indices 01-09 en .docs/wiki/
+  - matriz de sincronizacion docs: alcance o limites del MVP revisan 01; arquitectura, runtime o limites del sistema revisan 02, 07 y TECH-*; actores, secuencia o riesgos revisan 03 y FL-*; comandos CLI, entradas/salidas tipadas, errores o smoke revisan 04, RF-*, 06, TP-*, 09 y CT-*; entidades, invariantes o ciclo de vida revisan 05, 08 y DB-*
+  - distribucion de la skill: skills/mi-telegram-cli es la unica fuente editable; si la tarea actualiza o reinstala la copia global de la skill, sincronizar el espejo externo (incluido el binario si se recompila) en la misma tarea, sin dejar drift entre fuente, copia global y espejo; si falta permiso fuera del workspace, pedir aprobacion en vez de omitir la sincronizacion
+  - higiene de artefactos: no dejar logs, screenshots, trazas, volcados de auth, capturas de navegador ni exportes temporales en .docs/wiki/ ni skills/; no escribir efimeros en la raiz del repo; limpiar, reubicar o borrar los efimeros antes de cerrar la tarea
+  - no tratar estado local generado ni blobs de sesion de Telegram como documentacion canonica; si cambia la politica documental, mantener AGENTS.md y CLAUDE.md alineados
 
 ### Mandatory Wrappers
 
@@ -139,6 +145,10 @@ CLI en Go para QA end-user de Telegram (perfiles aislados, mensajes, adjuntos, b
 
   - .docs/wiki/06_matriz_pruebas_RF.md
   - .docs/wiki/06_pruebas/
+
+### Additional Local Rules
+
+  - Pre-push de este repo: infra/git/Invoke-PrePushGuard.ps1 no existe aqui; el minimo equivalente son comandos git: escanear secretos en el diff a publicar (git diff origin/main..HEAD con grep de claves, tokens y api_hash), verificar ancestro de main (git merge-base --is-ancestor origin/main HEAD) y no usar push forzado (nunca --force ni --force-with-lease sobre main)
 
 ---
 

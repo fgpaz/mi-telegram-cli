@@ -15,9 +15,11 @@ Validar la gestión segura de perfiles locales.
 | `TP-PRF-007` | `RF-PRF-003` | Baja exitosa | perfil purgado |
 | `TP-PRF-008` | `RF-PRF-003` | Baja bloqueada | `ProfileDeletionBlocked` |
 | `TP-PRF-009` | `RF-PRF-003` | Baja con `force` | purge completa de sesión y metadata |
-| `TP-PRF-010` | `RF-PRJ-001` | `projects bind --create-profile` | perfil creado `Unauthorized` y binding persistido |
+| `TP-PRF-010` | `RF-PRJ-001` | `projects bind --create-profile` | `InvalidInput`; perfil y binding no se crean |
 | `TP-PRF-011` | `RF-PRJ-001` | `projects bind` sin perfil existente | `ProfileNotFound` |
 | `TP-PRF-012` | `RF-PRJ-001` | list/show/current/remove | metadata de binding visible sin secretos |
+| `TP-PRF-017` | `RF-PRJ-001` | bind de perfil QA existente no autorizado | `ProfileNotEligibleForBinding`; registry sin cambios |
+| `TP-PRF-018` | `RF-PRJ-001` | bind de perfil QA existente autorizado y no protegido | binding persistido sin acceso a Telegram |
 | `TP-PRF-013` | `RF-PRJ-002` | comando Telegram sin `--profile` en repo vinculado | usa perfil del binding por `cwd` |
 | `TP-PRF-014` | `RF-PRJ-002` | comando Telegram con `--profile` explícito | el flag gana sobre el binding |
 | `TP-PRF-015` | `RF-PRJ-002` | binding apunta a perfil inexistente | `ProjectProfileMissing` |

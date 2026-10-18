@@ -37,6 +37,7 @@ Excepción visible:
 
 | Familia | Contrato visible |
 | --- | --- |
+| Gestión CLI | `version`/`--version` mismo JSON de procedencia, `doctor` local/read-only y `provider-manifest` `mi-mcp-provider/v2` (`telegram`) |
 | `profiles` | Gestión segura de perfiles locales |
 | `projects` | Binding global de repos a perfiles QA fijos |
 | `auth` | Login, estado y logout |
@@ -53,7 +54,11 @@ Excepción visible:
 - Contrato de eventos de auditoría: [CT-AUDIT-EVENTS](./09_contratos/CT-AUDIT-EVENTS.md)
 - Catálogo visible de errores: [CT-CLI-COMMANDS](./09_contratos/CT-CLI-COMMANDS.md)
 
-## 5. Sync triggers
+## 5. Gestión CLI
+
+Los comandos `version`, `--version`, `doctor` y `provider-manifest` se resuelven antes de inicializar perfiles, daemon o cliente Telegram. `provider-manifest` declara cada operación con `invocation` completa (`fixed_args` literales, `input_mapping.fields` y `output: json`) y su `output_schema`; no concatena nombres de operación ni activa runtime/gateway.
+
+## 6. Sync triggers
 
 Actualizar `09` y `CT-*` cuando cambien:
 

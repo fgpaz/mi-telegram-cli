@@ -10,11 +10,18 @@ import (
 	"time"
 
 	"mi-telegram-cli/internal/app"
+	"mi-telegram-cli/internal/management"
 	"mi-telegram-cli/internal/profile"
 	"mi-telegram-cli/internal/tg"
 )
 
 func main() {
+	if handled, code := management.Execute(os.Args[1:], os.Stdout); handled {
+		if code == 1 {
+			_, _ = fmt.Fprintln(os.Stderr, "mi-telegram-cli: management output unavailable")
+		}
+		os.Exit(code)
+	}
 	if shouldPrintHelp(os.Args[1:]) {
 		printUsage(os.Stdout)
 		return
@@ -93,11 +100,12 @@ func printUsage(w io.Writer) {
 	_, _ = fmt.Fprintln(w, "mi-telegram-cli")
 	_, _ = fmt.Fprintln(w, "")
 	_, _ = fmt.Fprintln(w, "Commands:")
+	_, _ = fmt.Fprintln(w, "  version | --version | doctor | provider-manifest")
 	_, _ = fmt.Fprintln(w, "  profiles add --profile <id> --display-name <name>")
 	_, _ = fmt.Fprintln(w, "  profiles list")
 	_, _ = fmt.Fprintln(w, "  profiles show --profile <id>")
 	_, _ = fmt.Fprintln(w, "  profiles remove --profile <id> [--force]")
-	_, _ = fmt.Fprintln(w, "  projects bind --root <path> --profile <id> [--create-profile] [--display-name <name>]")
+	_, _ = fmt.Fprintln(w, "  projects bind --root <path> --profile <authorized-qa-id>")
 	_, _ = fmt.Fprintln(w, "  projects list")
 	_, _ = fmt.Fprintln(w, "  projects show --root <path>")
 	_, _ = fmt.Fprintln(w, "  projects current")

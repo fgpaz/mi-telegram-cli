@@ -7,8 +7,8 @@ Permitir que cada repo use un perfil QA fijo propio, resuelto automáticamente p
 ## 2. Scope in/out
 
 - In: bind/list/show/current/remove de bindings `projectRoot -> profileId`.
-- In: creación opcional de metadata local no autorizada con `--create-profile`.
-- Out: login automático, migración o copia de `session.bin`.
+- In: `bind` solo con un perfil QA existente (`qa-*`), autorizado y con sesión local presente.
+- Out: crear perfiles desde `bind`, login automático, migración o copia de `session.bin`.
 
 ## 3. Main sequence
 
@@ -16,21 +16,27 @@ Permitir que cada repo use un perfil QA fijo propio, resuelto automáticamente p
 sequenceDiagram
     participant User as Operador/Agente
     participant CLI as mi-telegram-cli
-    participant Registry as projects.json
     participant Store as Storage perfiles
+    participant Registry as projects.json
 
-    User->>CLI: projects bind --root R --profile P --create-profile
-    CLI->>Store: asegurar PerfilLocal P si se solicita
-    CLI->>Registry: persistir R -> P
-    User->>CLI: messages send sin --profile desde R/subdir
-    CLI->>Registry: resolver prefijo mas largo por cwd
-    CLI->>Store: cargar perfil P
-    CLI-->>User: salida con profile=P
+    User->>CLI: projects bind --root R --profile P
+    CLI->>Store: validar existencia, QA y autorización local de P
+    alt perfil válido
+        CLI->>Registry: persistir R -> P
+        User->>CLI: messages send sin --profile desde R/subdir
+        CLI->>Registry: resolver prefijo mas largo por cwd
+        CLI->>Store: cargar perfil P
+        CLI-->>User: salida con profile=P
+    else perfil ausente/no autorizado/no QA
+        CLI-->>User: error tipado; no cambia projects.json
+    end
 ```
 
 ## 4. Error path
 
-- Perfil ausente durante `bind` sin `--create-profile`: `ProfileNotFound`.
+- Perfil ausente durante `bind`: `ProfileNotFound`.
+- Perfil no QA, no autorizado o sin sesión local: `ProfileNotEligibleForBinding`.
+- Perfil protegido: `ProfileProtected`.
 - Binding ausente durante `show/remove`: `ProjectBindingNotFound`.
 - Binding efectivo apunta a perfil eliminado: `ProjectProfileMissing`.
 

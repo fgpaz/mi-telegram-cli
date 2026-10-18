@@ -103,7 +103,7 @@ Campos prohibidos: texto de mensajes, captions, códigos, passwords, API hash, s
 ### 4.7 `ProjectBinding`
 
 Metadata operativa global que vincula un root de proyecto local a un perfil QA fijo.
-No representa una cuenta Telegram nueva ni duplica sesión; solo selecciona automáticamente un `PerfilLocal` existente o creado como metadata no autorizada.
+No representa una cuenta Telegram nueva ni duplica sesión; solo selecciona automáticamente un `PerfilLocal` ya existente, de ID `qa-*`, autorizado localmente y con sesión presente. El binding no crea perfiles ni modifica autorización.
 
 Campos mínimos: `projectRoot`, `profileId`, `displayName`, `createdAtUtc`, `updatedAtUtc`.
 

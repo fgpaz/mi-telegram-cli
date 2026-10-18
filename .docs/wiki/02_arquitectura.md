@@ -85,8 +85,9 @@ sequenceDiagram
 
 - V1 CLI-first, sin MCP propio.
 - V1 con daemon local de usuario para coordinación y auditoría; no expone admin UI ni endpoints remotos.
+- `projects bind` no crea perfiles ni inicia sesión; exige ID `qa-*`, estado `Authorized`, sesión local presente y perfil no protegido.
 - Un perfil = una cuenta Telegram dedicada = un storage aislado.
-- Los perfiles y sesiones viven en `~/.mi-telegram-cli/profiles`; cada repo importante puede vincularse a un perfil QA fijo en `~/.mi-telegram-cli/projects.json`.
+- Los perfiles y sesiones viven en `~/.mi-telegram-cli/profiles`; cada repo importante puede vincularse en `~/.mi-telegram-cli/projects.json` solo a un perfil QA ya existente y autorizado.
 - La resolución de perfil para comandos Telegram es: `--profile` explícito gana; si falta, se usa el binding por `cwd` con prefijo más largo; si no hay binding, fallback legacy `qa-dev`.
 - Si existe un binding pero su perfil no existe, el CLI falla con `ProjectProfileMissing` y no cae silenciosamente a `qa-dev`.
 - Auto-start por defecto para `auth status/logout`, `me`, `dialogs *` y `messages *`; `MI_TELEGRAM_CLI_DAEMON=off` fuerza modo directo y `required` falla si el daemon no está disponible.

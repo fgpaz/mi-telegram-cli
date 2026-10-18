@@ -2,6 +2,8 @@
 
 `mi-telegram-cli` is a local, headless Telegram CLI for repeatable end-to-end QA with real Telegram accounts. It is designed to be called from shells, scripts, and agent skills without depending on a Telegram MCP server.
 
+Management commands `version` and `--version` emit the same stable JSON with build provenance; `doctor` is local/read-only; `provider-manifest` emits `mi-mcp-provider/v2` with namespace `telegram`. Release source with `scripts/release.sh vX.Y.Z` after the commit is on `origin/main`.
+
 Useful entry points:
 
 - Repo-local skill: [skills/mi-telegram-cli/SKILL.md](skills/mi-telegram-cli/SKILL.md)
@@ -14,9 +16,10 @@ Useful entry points:
 Repos can be bound to fixed QA profiles so concurrent projects do not share the same Telegram session:
 
 ```powershell
-mi-telegram-cli projects bind --root C:\repos\mios\multi-tedi --profile qa-multi-tedi --create-profile --display-name "QA Multi Tedi"
-mi-telegram-cli auth login --profile qa-multi-tedi
+mi-telegram-cli projects bind --root C:\repos\mios\multi-tedi --profile qa-multi-tedi
 ```
+
+`qa-multi-tedi` must already be an authorized QA profile with a local session. Binding never creates a profile or logs in; a missing or ineligible profile returns a typed error before `projects.json` changes. If the project has no eligible profile, ask its owner instead of fabricating a profile or permission.
 
 For Telegram commands, explicit `--profile` wins. If it is omitted, the CLI resolves the longest matching binding in `~/.mi-telegram-cli/projects.json` for the current working directory, then falls back to legacy `qa-dev` when no binding exists. A broken binding returns `ProjectProfileMissing`.
 

@@ -1378,36 +1378,36 @@ func TestMessagesSendPhotoMissingFlagsReturnsInvalidInput(t *testing.T) {
 	}
 }
 
-func TestProjectsBindCreatesProfileAndCurrentUsesLongestPrefix(t *testing.T) {
-	root := t.TempDir()
-	parent := filepath.Join(root, "multi-tedi")
-	child := filepath.Join(parent, "services", "api")
-	if err := os.MkdirAll(child, 0o700); err != nil {
-		t.Fatalf("MkdirAll() error = %v", err)
-	}
-
-	exec, store, _, stdout := newExecutorWithCwd(t, nil, child)
+func TestProjectsBindRejectsProfileCreationAndUnauthorizedProfiles(t *testing.T) {
+	exec, store, _, stdout := newExecutor(t, nil)
 	ctx := context.Background()
-
-	if code := exec.Execute(ctx, []string{"projects", "bind", "--root", parent, "--profile", "qa-multi-tedi", "--create-profile", "--display-name", "QA Multi Tedi", "--json"}); code != 0 {
-		t.Fatalf("Execute(projects bind parent) exit code = %d, want 0", code)
-	}
-	if code := exec.Execute(ctx, []string{"projects", "bind", "--root", child, "--profile", "qa-api", "--create-profile", "--display-name", "QA API", "--json"}); code != 0 {
-		t.Fatalf("Execute(projects bind child) exit code = %d, want 0", code)
+	root := t.TempDir()
+	if _, err := store.Create("qa-existing", "QA Existing", ""); err != nil {
+		t.Fatalf("Create() error = %v", err)
 	}
 
-	if view, err := store.Get("qa-multi-tedi"); err != nil || view.AuthorizationStatus != profile.AuthorizationUnauthorized {
-		t.Fatalf("created profile = %+v, %v, want Unauthorized", view, err)
+	if code := exec.Execute(ctx, []string{"projects", "bind", "--root", root, "--profile", "qa-new", "--create-profile", "--json"}); code == 0 {
+		t.Fatalf("Execute(projects bind --create-profile) exit code = 0, want non-zero")
+	}
+	resp := decodeResponse(t, stdout.String())
+	if resp.Error == nil || resp.Error.Code != "InvalidInput" {
+		t.Fatalf("create flag error = %+v, want InvalidInput", resp.Error)
+	}
+	if _, err := store.Get("qa-new"); !errors.Is(err, profile.ErrProfileNotFound) {
+		t.Fatalf("profile created by projects bind: err=%v, want ProfileNotFound", err)
 	}
 
 	stdout.Reset()
-	if code := exec.Execute(ctx, []string{"projects", "current", "--json"}); code != 0 {
-		t.Fatalf("Execute(projects current) exit code = %d, want 0", code)
+	if code := exec.Execute(ctx, []string{"projects", "bind", "--root", root, "--profile", "qa-existing", "--json"}); code == 0 {
+		t.Fatalf("Execute(projects bind unauthorized profile) exit code = 0, want non-zero")
 	}
-	resp := decodeResponse(t, stdout.String())
-	binding := resp.Data["binding"].(map[string]any)
-	if got := binding["profileId"]; got != "qa-api" {
-		t.Fatalf("projects current profileId = %v, want qa-api", got)
+	resp = decodeResponse(t, stdout.String())
+	if resp.Error == nil || resp.Error.Code != "ProfileNotEligibleForBinding" {
+		t.Fatalf("unauthorized profile error = %+v, want ProfileNotEligibleForBinding", resp.Error)
+	}
+	bindings, err := store.ListProjectBindings()
+	if err != nil || len(bindings) != 0 {
+		t.Fatalf("bindings after rejected requests = %v, %v; want empty", bindings, err)
 	}
 }
 

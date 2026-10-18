@@ -31,10 +31,9 @@ Recommended local setup:
 2. Put `mi-telegram-cli.exe` on `PATH`, or call it by absolute path.
 3. If a consumer repo invokes the skill and `mi-telegram-cli` is not on `PATH`, treat that as a binary-resolution step, not as a hard blocker: try the source-repo binary path or build it from the source repo.
 4. Export `MI_TELEGRAM_API_ID` and `MI_TELEGRAM_API_HASH` in the current shell before any Telegram command.
-5. Keep one dedicated Telegram QA account per profile.
-6. Create one profile per environment or per bot lane.
-7. In a real interactive terminal, `auth login --profile <id>` can omit `--method` and the CLI will ask `QR` or `Phone + code`.
-8. For scripts, agents, and smoke helpers, keep `auth login --method code` or `auth login --method qr` explicit.
+5. Use only existing, authorized dedicated Telegram QA profiles.
+6. Bind a repo only with `projects bind --root <repo> --profile <existing-qa-profile>`; `bind` does not create profiles or log in.
+7. If a profile is missing, not authorized, or protected, stop and ask the project owner. Agent-driven QA never runs `auth login` or creates a profile; do not use Gabriel's account.
 9. On Windows, prefer `pwsh` over `powershell`; some environments only expose PowerShell 7.
 10. In PowerShell commands, quote peer values such as `"@target_bot"` or `"@username"`.
 
@@ -136,20 +135,23 @@ set +a
 mi-telegram-cli --help
 ```
 
-## Expected First-Use Flow
+## Existing Authorized QA Profile Flow
 
 ```powershell
-mi-telegram-cli profiles add --profile qa-dev --display-name "QA Dev"
-mi-telegram-cli auth login --profile qa-dev
-mi-telegram-cli dialogs list --profile qa-dev --json
-mi-telegram-cli messages send --profile qa-dev --peer "@target_bot" --text hola --json
-mi-telegram-cli messages send-photo --profile qa-dev --peer "@target_bot" --file ".\fixtures\sample.jpg" --caption "qa-dev VIS smoke" --json
-mi-telegram-cli messages read --profile qa-dev --peer "@target_bot" --limit 5 --json
-mi-telegram-cli messages press-button --profile qa-dev --peer "@target_bot" --message-id 301 --button-index 0 --json
-mi-telegram-cli messages wait --profile qa-dev --peer "@target_bot" --timeout 30 --json
+mi-telegram-cli projects bind --root <repo-root> --profile <existing-authorized-qa-profile> --json
+mi-telegram-cli projects current --json
+mi-telegram-cli auth status --json
+mi-telegram-cli dialogs list --json
+mi-telegram-cli messages send --peer "@target_bot" --text hola --json
+mi-telegram-cli messages send-photo --peer "@target_bot" --file ".\fixtures\sample.jpg" --caption "QA smoke" --json
+mi-telegram-cli messages read --peer "@target_bot" --limit 5 --json
+mi-telegram-cli messages press-button --peer "@target_bot" --message-id 301 --button-index 0 --json
+mi-telegram-cli messages wait --peer "@target_bot" --timeout 30 --json
 ```
 
-Explicit automation-friendly variants:
+The project owner must provision and authorize the QA profile before this flow. If `projects bind` rejects it, stop; do not create a profile, run login, or bypass the error.
+
+Operator-managed authentication bootstrap (not for agent-driven QA):
 
 ```powershell
 mi-telegram-cli auth login --profile qa-dev --method qr

@@ -12,7 +12,7 @@ Prefer the CLI over any Telegram MCP when the goal is local control of sessions,
 ## Operating Rules
 
 - Keep one profile per Telegram test account and environment.
-- Prefer one fixed QA profile per active project/repo when concurrent smokes may run. Bind repos with `projects bind` and let commands resolve the profile from `cwd`.
+- Prefer one fixed QA profile per active project/repo when concurrent smokes may run. Bind only an existing authorized `qa-*` profile with `projects bind`; the CLI never creates profiles or logs in during a bind. If no eligible profile exists, stop and ask the project owner.
 - Use dedicated QA accounts only, never personal accounts.
 - Keep Telegram logic in the CLI; the skill should only orchestrate shell commands.
 - Do not assume the current workspace is the `mi-telegram-cli` source repo. This skill must work from other projects too.
@@ -39,12 +39,9 @@ Prefer the CLI over any Telegram MCP when the goal is local control of sessions,
 1. Verify whether the binary exists and is callable.
 2. If it is not on `PATH`, try the known absolute binary path or a source-repo `bin/` path before treating it as missing.
 3. If the binary is still missing, follow [references/quickstart.md](references/quickstart.md) to install or build it.
-4. Create or reuse a profile, or bind the current repo to one:
-   `mi-telegram-cli projects bind --root <repo-root> --profile qa-<repo> --create-profile --display-name "QA <Repo>"`
-5. Login the dedicated account.
-   In a real interactive terminal, `auth login --profile <id>` can omit `--method` and the CLI will ask `QR` or `Phone + code`.
-   For scripts, agents, and smokes, keep `--method code` or `--method qr` explicit.
-   New profiles created by `projects bind --create-profile` are only local metadata until `auth login --profile <id>` succeeds.
+4. Bind the current repo only to an existing authorized QA profile:
+   `mi-telegram-cli projects bind --root <repo-root> --profile <existing-qa-profile>`
+5. If the profile is missing, is not a `qa-*` profile, is protected, or has no authorized local session, stop and ask the project owner. Do not create profiles, request new grants, or run `auth login` as an agent.
    On Windows, prefer `pwsh` for helper scripts and local interactive wrappers.
 6. Resolve the target bot or dialog.
    In PowerShell, quote peer values such as `"@target_bot"`.
@@ -93,7 +90,7 @@ When this skill is used inside another project:
 - Use `buttons[].index` as the canonical selector when the flow requires `messages press-button`; use `button-text` only as fallback.
 - Treat `attachments[]` and `buttons[]` as observational metadata; this skill should not assume downloads or generic UI taps exist unless the CLI explicitly exposes them.
 - Treat `WaitTimeout`, `PeerAmbiguous`, and `UnauthorizedProfile` as first-class failures.
-- Treat `ProjectProfileMissing` as a binding/configuration failure; run `projects show/current/list` and either recreate the profile or remove/rebind the project.
+- Treat `ProjectProfileMissing` and `ProfileNotEligibleForBinding` as binding/configuration failures; inspect `projects show/current/list`, then ask the project owner for an already authorized QA profile. Never create a profile or bypass the guard.
 - Treat `QueueTimeout`, `DaemonUnavailable`, `DaemonLeaseDenied`, and `DaemonLeaseExpired` as first-class coordination failures.
 - Use `audit summary --json --errors-only` to diagnose repeated profile contention or daemon failures before rerunning a live Telegram smoke.
 - Do not persist or echo secrets, auth codes, or session blobs in chat output.
@@ -105,7 +102,7 @@ When this skill is used inside another project:
 
 - `qa-alt` is real-user state and is protected against automation. Any modifying subcommand (`auth login`, `auth logout`, `dialogs mark-read`, `messages send`, `messages send-photo`, `messages press-button`) over `--profile qa-alt` returns `ProfileProtected` with the message `qa-alt is protected real-user state; use qa-dev for automation`.
 - Read-only commands over `qa-alt` (`auth status`, `me`, `dialogs list`, `messages read`, `messages wait`) remain available for human inspection.
-- For automated bot QA, always select `qa-dev` (or another dedicated QA profile that is NOT in the protected list).
+- For automated bot QA, use only an existing authorized QA profile that is not protected. A `qa-*` name alone does not authorize the profile; `projects bind` also checks its local authorization state and session.
 
 ## Shell Caveats (Git Bash on Windows)
 

@@ -3,11 +3,14 @@ package app
 import (
 	"context"
 	"errors"
+	"regexp"
 	"strings"
 
 	"mi-telegram-cli/internal/output"
 	"mi-telegram-cli/internal/profile"
 )
+
+var qaProfileIDPattern = regexp.MustCompile(`^qa-[A-Za-z0-9][A-Za-z0-9._-]*$`)
 
 func (e *Executor) handleProjects(_ context.Context, args []string) (output.Response, bool) {
 	if len(args) == 0 {
@@ -19,32 +22,35 @@ func (e *Executor) handleProjects(_ context.Context, args []string) (output.Resp
 		fs := newFlagSet("projects bind")
 		root := fs.String("root", "", "")
 		profileID := fs.String("profile", "", "")
-		createProfile := fs.Bool("create-profile", false, "")
-		displayName := fs.String("display-name", "", "")
 		jsonMode := fs.Bool("json", false, "")
 		if err := fs.Parse(args[1:]); err != nil {
 			return e.errorResponse("", "InvalidInput", err.Error()), true
 		}
-		if strings.TrimSpace(*root) == "" || strings.TrimSpace(*profileID) == "" {
-			return e.errorResponse(*profileID, "InvalidInput", "root and profile are required"), *jsonMode
+		resolvedProfileID := strings.TrimSpace(*profileID)
+		if strings.TrimSpace(*root) == "" || resolvedProfileID == "" {
+			return e.errorResponse(resolvedProfileID, "InvalidInput", "root and profile are required"), *jsonMode
 		}
-
-		if _, err := e.store.Get(*profileID); err != nil {
-			if !errors.Is(err, profile.ErrProfileNotFound) || !*createProfile {
-				return e.mapStoreError(*profileID, err), *jsonMode
-			}
-			name := strings.TrimSpace(*displayName)
-			if name == "" {
-				name = *profileID
-			}
-			if _, err := e.store.Create(*profileID, name, ""); err != nil {
-				return e.mapStoreError(*profileID, err), *jsonMode
-			}
+		if e.isProtectedProfileForAutomation(resolvedProfileID) {
+			return e.profileProtectedResponse(resolvedProfileID), *jsonMode
 		}
-
-		binding, err := e.store.BindProject(*root, *profileID, *displayName)
+		if !qaProfileIDPattern.MatchString(resolvedProfileID) {
+			return e.errorResponse(resolvedProfileID, "ProfileNotEligibleForBinding", "project binding requires an existing authorized QA profile with a local session"), *jsonMode
+		}
+		view, err := e.store.Get(resolvedProfileID)
 		if err != nil {
-			return e.errorResponse(*profileID, "LocalStorageFailure", err.Error()), *jsonMode
+			return e.mapStoreError(resolvedProfileID, err), *jsonMode
+		}
+		hasSession, err := e.store.SessionExists(resolvedProfileID)
+		if err != nil {
+			return e.mapStoreError(resolvedProfileID, err), *jsonMode
+		}
+		if view.AuthorizationStatus != profile.AuthorizationAuthorized || !hasSession {
+			return e.errorResponse(resolvedProfileID, "ProfileNotEligibleForBinding", "project binding requires an existing authorized QA profile with a local session"), *jsonMode
+		}
+
+		binding, err := e.store.BindProject(*root, resolvedProfileID, "")
+		if err != nil {
+			return e.errorResponse(resolvedProfileID, "LocalStorageFailure", err.Error()), *jsonMode
 		}
 		return output.Response{
 			OK:      true,

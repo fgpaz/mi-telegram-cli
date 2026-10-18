@@ -1,0 +1,190 @@
+{
+  "format": "mi-mcp-provider/v2",
+  "namespace": "telegram",
+  "binary": "mi-telegram-cli",
+  "provider_version": "0.1.0",
+  "description": "CLI local para QA conversacional de Telegram mediante perfiles QA existentes y autorizados.",
+  "tags": ["telegram", "qa", "mensajes", "perfiles"],
+  "contracts": {
+    "version": "cli-version-v0",
+    "doctor": "cli-doctor-v0",
+    "projects bind": "RF-PRJ-001",
+    "projects current": "RF-PRJ-002",
+    "projects list": "RF-PRJ-001",
+    "auth status": "RF-AUT-002",
+    "messages send": "RF-MSG-002",
+    "messages send-photo": "RF-MSG-006",
+    "messages read": "RF-MSG-001",
+    "messages wait": "RF-MSG-003",
+    "messages press-button": "RF-MSG-005",
+    "mark-read": "RF-MSG-004",
+    "audit summary": "RF-AUD-001"
+  },
+  "auth_env_refs": ["MI_TELEGRAM_API_ID", "MI_TELEGRAM_API_HASH"],
+  "invocation": {
+    "kind": "cli",
+    "command": "mi-telegram-cli",
+    "fixed_args": [],
+    "input_mapping": {"fields": {}},
+    "output": "json"
+  },
+  "operations": [
+    {
+      "name": "version",
+      "description": "Muestra versión y procedencia del binario.",
+      "effect": "read",
+      "contract": "cli-version-v0",
+      "input_schema": {"type": "object", "properties": {}, "required": [], "additionalProperties": false},
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "ok": {"const": true},
+          "data": {
+            "type": "object",
+            "properties": {
+              "version": {"type": "string"}, "commit": {"type": "string"}, "build_time": {"type": "string"},
+              "go": {"type": "string"}, "os": {"type": "string"}, "arch": {"type": "string"},
+              "vcs_modified": {"type": "string", "enum": ["true", "false", "unknown"]}
+            },
+            "required": ["version", "commit", "build_time", "go", "os", "arch", "vcs_modified"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["ok", "data"], "additionalProperties": false
+      },
+      "invocation": {"kind": "cli", "command": "mi-telegram-cli", "fixed_args": ["version"], "input_mapping": {"fields": {}}, "output": "json"}
+    },
+    {
+      "name": "doctor",
+      "description": "Comprueba localmente la procedencia del binario; no consulta Telegram ni lee secretos.",
+      "effect": "read",
+      "contract": "cli-doctor-v0",
+      "input_schema": {"type": "object", "properties": {}, "required": [], "additionalProperties": false},
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "ok": {"const": true},
+          "data": {
+            "type": "object",
+            "properties": {
+              "status": {"type": "string", "enum": ["ok", "explicit_incomplete"]},
+              "read_only": {"const": true}, "redacted": {"const": true},
+              "checks": {"type": "array", "items": {"type": "object", "properties": {"name": {"type": "string"}, "status": {"type": "string"}}, "required": ["name", "status"], "additionalProperties": false}},
+              "gaps": {"type": "array", "items": {"type": "string"}}
+            },
+            "required": ["status", "read_only", "redacted", "checks", "gaps"], "additionalProperties": false
+          }
+        },
+        "required": ["ok", "data"], "additionalProperties": false
+      },
+      "invocation": {"kind": "cli", "command": "mi-telegram-cli", "fixed_args": ["doctor"], "input_mapping": {"fields": {}}, "output": "json"}
+    },
+    {
+      "name": "projects bind",
+      "description": "Vincula un proyecto solo a un perfil QA existente, autorizado y con sesión local; no crea perfiles ni inicia sesión.",
+      "effect": "write",
+      "contract": "RF-PRJ-001",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "root": {"type": "string", "minLength": 1, "maxLength": 4096},
+          "profile": {"type": "string", "pattern": "^qa-[A-Za-z0-9][A-Za-z0-9._-]*$"},
+          "json": {"const": true}
+        },
+        "required": ["root", "profile", "json"], "additionalProperties": false
+      },
+      "output_schema": {"type": "object", "properties": {"ok": {"type": "boolean"}, "profile": {"type": "string"}, "data": {"type": ["object", "null"], "properties": {"binding": {"type": "object", "properties": {"projectRoot": {"type": "string"}, "profileId": {"type": "string"}, "displayName": {"type": "string"}, "createdAtUtc": {"type": "string", "format": "date-time"}, "updatedAtUtc": {"type": "string", "format": "date-time"}}, "required": ["projectRoot", "profileId", "createdAtUtc", "updatedAtUtc"], "additionalProperties": false}}, "required": ["binding"], "additionalProperties": false}, "error": {"type": ["object", "null"], "properties": {"code": {"type": "string"}, "message": {"type": "string"}}, "required": ["code", "message"], "additionalProperties": false}, "queueMs": {"type": "integer", "minimum": 0}}, "required": ["ok", "profile", "data", "error"], "additionalProperties": false},
+      "invocation": {"kind": "cli", "command": "mi-telegram-cli", "fixed_args": ["projects", "bind"], "input_mapping": {"fields": {"root": {"source": "option", "flag": "--root"}, "profile": {"source": "option", "flag": "--profile"}, "json": {"source": "option", "flag": "--json"}}}, "output": "json"}
+    },
+    {
+      "name": "projects current",
+      "description": "Resuelve el binding efectivo del cwd sin consultar Telegram.",
+      "effect": "read",
+      "contract": "RF-PRJ-002",
+      "input_schema": {"type": "object", "properties": {"json": {"const": true}}, "required": ["json"], "additionalProperties": false},
+      "output_schema": {"type": "object", "properties": {"ok": {"type": "boolean"}, "profile": {"type": "string"}, "data": {"type": ["object", "null"], "properties": {"matched": {"type": "boolean"}, "binding": {"type": "object", "properties": {"projectRoot": {"type": "string"}, "profileId": {"type": "string"}, "displayName": {"type": "string"}, "createdAtUtc": {"type": "string", "format": "date-time"}, "updatedAtUtc": {"type": "string", "format": "date-time"}}, "required": ["projectRoot", "profileId", "createdAtUtc", "updatedAtUtc"], "additionalProperties": false}, "cwd": {"type": "string"}, "fallback": {"type": "boolean"}, "profileId": {"type": "string"}}, "required": ["matched", "cwd"], "additionalProperties": false}, "error": {"type": ["object", "null"], "properties": {"code": {"type": "string"}, "message": {"type": "string"}}, "required": ["code", "message"], "additionalProperties": false}, "queueMs": {"type": "integer", "minimum": 0}}, "required": ["ok", "profile", "data", "error"], "additionalProperties": false},
+      "invocation": {"kind": "cli", "command": "mi-telegram-cli", "fixed_args": ["projects", "current"], "input_mapping": {"fields": {"json": {"source": "option", "flag": "--json"}}}, "output": "json"}
+    },
+    {
+      "name": "projects list",
+      "description": "Lista los bindings locales sin incluir sesiones ni secretos.",
+      "effect": "read",
+      "contract": "RF-PRJ-001",
+      "input_schema": {"type": "object", "properties": {"json": {"const": true}}, "required": ["json"], "additionalProperties": false},
+      "output_schema": {"type": "object", "properties": {"ok": {"type": "boolean"}, "profile": {"type": "string"}, "data": {"type": ["object", "null"], "properties": {"items": {"type": "array", "items": {"type": "object", "properties": {"projectRoot": {"type": "string"}, "profileId": {"type": "string"}, "displayName": {"type": "string"}, "createdAtUtc": {"type": "string", "format": "date-time"}, "updatedAtUtc": {"type": "string", "format": "date-time"}}, "required": ["projectRoot", "profileId", "createdAtUtc", "updatedAtUtc"], "additionalProperties": false}}, "count": {"type": "integer", "minimum": 0}}, "required": ["items", "count"], "additionalProperties": false}, "error": {"type": ["object", "null"], "properties": {"code": {"type": "string"}, "message": {"type": "string"}}, "required": ["code", "message"], "additionalProperties": false}, "queueMs": {"type": "integer", "minimum": 0}}, "required": ["ok", "profile", "data", "error"], "additionalProperties": false},
+      "invocation": {"kind": "cli", "command": "mi-telegram-cli", "fixed_args": ["projects", "list"], "input_mapping": {"fields": {"json": {"source": "option", "flag": "--json"}}}, "output": "json"}
+    },
+    {
+      "name": "auth status",
+      "description": "Lee el estado local de autorización Telegram del perfil seleccionado.",
+      "effect": "read",
+      "contract": "RF-AUT-002",
+      "input_schema": {"type": "object", "properties": {"profile": {"type": "string", "minLength": 1}, "json": {"const": true}}, "required": ["json"], "additionalProperties": false},
+      "output_schema": {"type": "object", "properties": {"ok": {"type": "boolean"}, "profile": {"type": "string"}, "data": {"type": ["object", "null"], "properties": {"authorizationStatus": {"type": "string", "enum": ["Unauthorized", "PendingCode", "Authorized", "LoggedOut"]}, "lastCheckedAtUtc": {"type": ["string", "null"], "format": "date-time"}}, "required": ["authorizationStatus", "lastCheckedAtUtc"], "additionalProperties": false}, "error": {"type": ["object", "null"], "properties": {"code": {"type": "string"}, "message": {"type": "string"}}, "required": ["code", "message"], "additionalProperties": false}, "queueMs": {"type": "integer", "minimum": 0}}, "required": ["ok", "profile", "data", "error"], "additionalProperties": false},
+      "invocation": {"kind": "cli", "command": "mi-telegram-cli", "fixed_args": ["auth", "status"], "input_mapping": {"fields": {"profile": {"source": "option", "flag": "--profile"}, "json": {"source": "option", "flag": "--json"}}}, "output": "json"}
+    },
+    {
+      "name": "messages send",
+      "description": "Envía un mensaje al peer indicado.",
+      "effect": "write",
+      "contract": "RF-MSG-002",
+      "input_schema": {"type": "object", "properties": {"profile": {"type": "string", "minLength": 1}, "peer": {"type": "string", "minLength": 1}, "text": {"type": "string", "minLength": 1}, "json": {"const": true}}, "required": ["peer", "text", "json"], "additionalProperties": false},
+      "output_schema": {"type": "object", "properties": {"ok": {"type": "boolean"}, "profile": {"type": "string"}, "data": {"type": ["object", "null"], "properties": {"peer": {"type": "object", "properties": {"id": {"type": "integer"}, "kind": {"type": "string"}, "displayName": {"type": "string"}, "username": {"type": "string"}}, "required": ["id", "kind", "displayName"], "additionalProperties": false}, "messageId": {"type": "integer"}, "sentAtUtc": {"type": "string", "format": "date-time"}}, "required": ["peer", "messageId", "sentAtUtc"], "additionalProperties": false}, "error": {"type": ["object", "null"], "properties": {"code": {"type": "string"}, "message": {"type": "string"}}, "required": ["code", "message"], "additionalProperties": false}, "queueMs": {"type": "integer", "minimum": 0}}, "required": ["ok", "profile", "data", "error"], "additionalProperties": false},
+      "invocation": {"kind": "cli", "command": "mi-telegram-cli", "fixed_args": ["messages", "send"], "input_mapping": {"fields": {"profile": {"source": "option", "flag": "--profile"}, "peer": {"source": "option", "flag": "--peer"}, "text": {"source": "option", "flag": "--text"}, "json": {"source": "option", "flag": "--json"}}}, "output": "json"}
+    },
+    {
+      "name": "messages send-photo",
+      "description": "Envía una foto local validada al peer indicado.",
+      "effect": "write",
+      "contract": "RF-MSG-006",
+      "input_schema": {"type": "object", "properties": {"profile": {"type": "string", "minLength": 1}, "peer": {"type": "string", "minLength": 1}, "file": {"type": "string", "minLength": 1}, "caption": {"type": "string", "maxLength": 1024}, "json": {"const": true}}, "required": ["peer", "file", "json"], "additionalProperties": false},
+      "output_schema": {"type": "object", "properties": {"ok": {"type": "boolean"}, "profile": {"type": "string"}, "data": {"type": ["object", "null"], "properties": {"peer": {"type": "object", "properties": {"id": {"type": "integer"}, "kind": {"type": "string"}, "displayName": {"type": "string"}, "username": {"type": "string"}}, "required": ["id", "kind", "displayName"], "additionalProperties": false}, "messageId": {"type": "integer"}, "sentAtUtc": {"type": "string", "format": "date-time"}, "media": {"type": "object", "properties": {"kind": {"const": "photo"}, "mimeType": {"type": "string"}, "sizeBytes": {"type": "integer"}, "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}, "caption": {"type": "string"}}, "required": ["kind", "mimeType", "sizeBytes", "sha256"], "additionalProperties": false}}, "required": ["peer", "messageId", "sentAtUtc", "media"], "additionalProperties": false}, "error": {"type": ["object", "null"], "properties": {"code": {"type": "string"}, "message": {"type": "string"}}, "required": ["code", "message"], "additionalProperties": false}, "queueMs": {"type": "integer", "minimum": 0}}, "required": ["ok", "profile", "data", "error"], "additionalProperties": false},
+      "invocation": {"kind": "cli", "command": "mi-telegram-cli", "fixed_args": ["messages", "send-photo"], "input_mapping": {"fields": {"profile": {"source": "option", "flag": "--profile"}, "peer": {"source": "option", "flag": "--peer"}, "file": {"source": "option", "flag": "--file"}, "caption": {"source": "option", "flag": "--caption"}, "json": {"source": "option", "flag": "--json"}}}, "output": "json"}
+    },
+    {
+      "name": "messages read",
+      "description": "Lee mensajes recientes y sus botones/adjuntos para un smoke QA.",
+      "effect": "read",
+      "contract": "RF-MSG-001",
+      "input_schema": {"type": "object", "properties": {"profile": {"type": "string", "minLength": 1}, "peer": {"type": "string", "minLength": 1}, "limit": {"type": "integer", "minimum": 1, "maximum": 100}, "after_id": {"type": "integer", "minimum": 0}, "json": {"const": true}}, "required": ["peer", "json"], "additionalProperties": false},
+      "output_schema": {"type": "object", "properties": {"ok": {"type": "boolean"}, "profile": {"type": "string"}, "data": {"type": ["object", "null"], "properties": {"items": {"type": "array", "items": {"type": "object", "properties": {"id": {"type": "integer"}, "direction": {"type": "string"}, "text": {"type": "string"}, "sentAtUtc": {"type": "string", "format": "date-time"}, "attachments": {"type": "array", "items": {"type": "object", "properties": {"kind": {"type": "string"}, "summary": {"type": "string"}, "details": {"type": "object", "additionalProperties": true}}, "required": ["kind", "summary"], "additionalProperties": false}}, "buttons": {"type": "array", "items": {"type": "object", "properties": {"index": {"type": "integer"}, "row": {"type": "integer"}, "col": {"type": "integer"}, "kind": {"type": "string"}, "text": {"type": "string"}, "actionable": {"type": "boolean"}, "url": {"type": "string"}, "requiresPassword": {"type": "boolean"}}, "required": ["index", "row", "col", "kind", "text", "actionable"], "additionalProperties": false}}}, "required": ["id", "direction", "text", "sentAtUtc", "attachments", "buttons"], "additionalProperties": false}}, "count": {"type": "integer", "minimum": 0}, "peer": {"type": "object", "properties": {"id": {"type": "integer"}, "kind": {"type": "string"}, "displayName": {"type": "string"}, "username": {"type": "string"}}, "required": ["id", "kind", "displayName"], "additionalProperties": false}}, "required": ["items", "count", "peer"], "additionalProperties": false}, "error": {"type": ["object", "null"], "properties": {"code": {"type": "string"}, "message": {"type": "string"}}, "required": ["code", "message"], "additionalProperties": false}, "queueMs": {"type": "integer", "minimum": 0}}, "required": ["ok", "profile", "data", "error"], "additionalProperties": false},
+      "invocation": {"kind": "cli", "command": "mi-telegram-cli", "fixed_args": ["messages", "read"], "input_mapping": {"fields": {"profile": {"source": "option", "flag": "--profile"}, "peer": {"source": "option", "flag": "--peer"}, "limit": {"source": "option", "flag": "--limit"}, "after_id": {"source": "option", "flag": "--after-id"}, "json": {"source": "option", "flag": "--json"}}}, "output": "json"}
+    },
+    {
+      "name": "messages wait",
+      "description": "Espera una respuesta posterior al ID indicado, con timeout acotado.",
+      "effect": "read",
+      "contract": "RF-MSG-003",
+      "input_schema": {"type": "object", "properties": {"profile": {"type": "string", "minLength": 1}, "peer": {"type": "string", "minLength": 1}, "after_id": {"type": "integer", "minimum": 0}, "timeout": {"type": "integer", "minimum": 1, "maximum": 300}, "json": {"const": true}}, "required": ["peer", "timeout", "json"], "additionalProperties": false},
+      "output_schema": {"type": "object", "properties": {"ok": {"type": "boolean"}, "profile": {"type": "string"}, "data": {"type": ["object", "null"], "properties": {"peer": {"type": "object", "properties": {"id": {"type": "integer"}, "kind": {"type": "string"}, "displayName": {"type": "string"}, "username": {"type": "string"}}, "required": ["id", "kind", "displayName"], "additionalProperties": false}, "message": {"type": "object", "properties": {"id": {"type": "integer"}, "direction": {"type": "string"}, "text": {"type": "string"}, "sentAtUtc": {"type": "string", "format": "date-time"}, "attachments": {"type": "array", "items": {"type": "object", "properties": {"kind": {"type": "string"}, "summary": {"type": "string"}, "details": {"type": "object", "additionalProperties": true}}, "required": ["kind", "summary"], "additionalProperties": false}}, "buttons": {"type": "array", "items": {"type": "object", "properties": {"index": {"type": "integer"}, "row": {"type": "integer"}, "col": {"type": "integer"}, "kind": {"type": "string"}, "text": {"type": "string"}, "actionable": {"type": "boolean"}, "url": {"type": "string"}, "requiresPassword": {"type": "boolean"}}, "required": ["index", "row", "col", "kind", "text", "actionable"], "additionalProperties": false}}}, "required": ["id", "direction", "text", "sentAtUtc", "attachments", "buttons"], "additionalProperties": false}, "observedAtUtc": {"type": "string", "format": "date-time"}}, "required": ["peer", "message", "observedAtUtc"], "additionalProperties": false}, "error": {"type": ["object", "null"], "properties": {"code": {"type": "string"}, "message": {"type": "string"}}, "required": ["code", "message"], "additionalProperties": false}, "queueMs": {"type": "integer", "minimum": 0}}, "required": ["ok", "profile", "data", "error"], "additionalProperties": false},
+      "invocation": {"kind": "cli", "command": "mi-telegram-cli", "fixed_args": ["messages", "wait"], "input_mapping": {"fields": {"profile": {"source": "option", "flag": "--profile"}, "peer": {"source": "option", "flag": "--peer"}, "after_id": {"source": "option", "flag": "--after-id"}, "timeout": {"source": "option", "flag": "--timeout"}, "json": {"source": "option", "flag": "--json"}}}, "output": "json"}
+    },
+    {
+      "name": "messages press-button",
+      "description": "Ejecuta el callback del botón inline solicitado; no abre navegador ni WebView.",
+      "effect": "write",
+      "contract": "RF-MSG-005",
+      "input_schema": {"type": "object", "properties": {"profile": {"type": "string", "minLength": 1}, "peer": {"type": "string", "minLength": 1}, "message_id": {"type": "integer", "minimum": 1}, "button_index": {"type": "integer", "minimum": 0}, "button_text": {"type": "string", "minLength": 1}, "json": {"const": true}}, "required": ["peer", "message_id", "json"], "oneOf": [{"required": ["button_index"]}, {"required": ["button_text"]}], "additionalProperties": false},
+      "output_schema": {"type": "object", "properties": {"ok": {"type": "boolean"}, "profile": {"type": "string"}, "data": {"type": ["object", "null"], "properties": {"peer": {"type": "object", "properties": {"id": {"type": "integer"}, "kind": {"type": "string"}, "displayName": {"type": "string"}, "username": {"type": "string"}}, "required": ["id", "kind", "displayName"], "additionalProperties": false}, "action": {"type": "string"}, "button": {"type": "object", "additionalProperties": true}, "url": {"type": "string"}, "callbackAnswer": {"type": "object", "properties": {"message": {"type": "string"}, "alert": {"type": "boolean"}, "hasUrl": {"type": "boolean"}, "url": {"type": "string"}, "nativeUi": {"type": "boolean"}, "cacheTime": {"type": "integer"}}, "required": ["alert", "hasUrl", "nativeUi", "cacheTime"], "additionalProperties": false}, "observedAtUtc": {"type": "string", "format": "date-time"}}, "required": ["peer", "action", "button", "observedAtUtc"], "additionalProperties": false}, "error": {"type": ["object", "null"], "properties": {"code": {"type": "string"}, "message": {"type": "string"}}, "required": ["code", "message"], "additionalProperties": false}, "queueMs": {"type": "integer", "minimum": 0}}, "required": ["ok", "profile", "data", "error"], "additionalProperties": false},
+      "invocation": {"kind": "cli", "command": "mi-telegram-cli", "fixed_args": ["messages", "press-button"], "input_mapping": {"fields": {"profile": {"source": "option", "flag": "--profile"}, "peer": {"source": "option", "flag": "--peer"}, "message_id": {"source": "option", "flag": "--message-id"}, "button_index": {"source": "option", "flag": "--button-index"}, "button_text": {"source": "option", "flag": "--button-text"}, "json": {"source": "option", "flag": "--json"}}}, "output": "json"}
+    },
+    {
+      "name": "mark-read",
+      "description": "Marca el diálogo indicado como leído.",
+      "effect": "write",
+      "contract": "RF-MSG-004",
+      "input_schema": {"type": "object", "properties": {"profile": {"type": "string", "minLength": 1}, "peer": {"type": "string", "minLength": 1}, "json": {"const": true}}, "required": ["peer", "json"], "additionalProperties": false},
+      "output_schema": {"type": "object", "properties": {"ok": {"type": "boolean"}, "profile": {"type": "string"}, "data": {"type": ["object", "null"], "properties": {"peer": {"type": "object", "properties": {"id": {"type": "integer"}, "kind": {"type": "string"}, "displayName": {"type": "string"}, "username": {"type": "string"}}, "required": ["id", "kind", "displayName"], "additionalProperties": false}, "markedRead": {"const": true}, "completedAtUtc": {"type": "string", "format": "date-time"}}, "required": ["peer", "markedRead", "completedAtUtc"], "additionalProperties": false}, "error": {"type": ["object", "null"], "properties": {"code": {"type": "string"}, "message": {"type": "string"}}, "required": ["code", "message"], "additionalProperties": false}, "queueMs": {"type": "integer", "minimum": 0}}, "required": ["ok", "profile", "data", "error"], "additionalProperties": false},
+      "invocation": {"kind": "cli", "command": "mi-telegram-cli", "fixed_args": ["dialogs", "mark-read"], "input_mapping": {"fields": {"profile": {"source": "option", "flag": "--profile"}, "peer": {"source": "option", "flag": "--peer"}, "json": {"source": "option", "flag": "--json"}}}, "output": "json"}
+    },
+    {
+      "name": "audit summary",
+      "description": "Resume auditoría local redacted; no exporta eventos ni cuerpos de mensajes.",
+      "effect": "read",
+      "contract": "RF-AUD-001",
+      "input_schema": {"type": "object", "properties": {"profile": {"type": "string", "minLength": 1}, "since": {"type": "string", "format": "date-time"}, "audit_operation": {"type": "string"}, "errors_only": {"type": "boolean"}, "json": {"const": true}}, "required": ["json"], "additionalProperties": false},
+      "output_schema": {"type": "object", "properties": {"ok": {"type": "boolean"}, "profile": {"type": "string"}, "data": {"type": ["object", "null"], "properties": {"summary": {"type": "object", "properties": {"count": {"type": "integer"}, "ok": {"type": "integer"}, "errors": {"type": "integer"}, "byOperation": {"type": "object", "additionalProperties": {"type": "object", "properties": {"count": {"type": "integer"}, "errors": {"type": "integer"}, "queueP50Ms": {"type": "integer"}, "queueP95Ms": {"type": "integer"}, "durationP50Ms": {"type": "integer"}, "durationP95Ms": {"type": "integer"}}, "required": ["count", "errors", "queueP50Ms", "queueP95Ms", "durationP50Ms", "durationP95Ms"], "additionalProperties": false}}, "byProfile": {"type": "object", "additionalProperties": {"type": "object", "properties": {"count": {"type": "integer"}, "errors": {"type": "integer"}, "queueP50Ms": {"type": "integer"}, "queueP95Ms": {"type": "integer"}, "durationP50Ms": {"type": "integer"}, "durationP95Ms": {"type": "integer"}}, "required": ["count", "errors", "queueP50Ms", "queueP95Ms", "durationP50Ms", "durationP95Ms"], "additionalProperties": false}}, "byProject": {"type": "object", "additionalProperties": {"type": "object", "properties": {"count": {"type": "integer"}, "errors": {"type": "integer"}, "queueP50Ms": {"type": "integer"}, "queueP95Ms": {"type": "integer"}, "durationP50Ms": {"type": "integer"}, "durationP95Ms": {"type": "integer"}}, "required": ["count", "errors", "queueP50Ms", "queueP95Ms", "durationP50Ms", "durationP95Ms"], "additionalProperties": false}}}, "required": ["count", "ok", "errors", "byOperation", "byProfile", "byProject"], "additionalProperties": false}}, "required": ["summary"], "additionalProperties": false}, "error": {"type": ["object", "null"], "properties": {"code": {"type": "string"}, "message": {"type": "string"}}, "required": ["code", "message"], "additionalProperties": false}, "queueMs": {"type": "integer", "minimum": 0}}, "required": ["ok", "profile", "data", "error"], "additionalProperties": false},
+      "invocation": {"kind": "cli", "command": "mi-telegram-cli", "fixed_args": ["audit", "summary"], "input_mapping": {"fields": {"profile": {"source": "option", "flag": "--profile"}, "since": {"source": "option", "flag": "--since"}, "audit_operation": {"source": "option", "flag": "--operation"}, "errors_only": {"source": "option", "flag": "--errors-only"}, "json": {"source": "option", "flag": "--json"}}}, "output": "json"}
+    }
+  ]
+}

@@ -17,6 +17,7 @@
 - `--profile` explícito siempre gana.
 - Si falta `--profile`, el CLI busca el binding cuyo `projectRoot` sea el prefijo más largo del `cwd`.
 - El matching de paths es case-insensitive en Windows.
+- `projects bind` solo registra perfiles QA ya existentes y autorizados; no crea perfiles ni inicia sesión.
 - Si no hay binding, el fallback legacy es `qa-dev`.
 - Si hay binding pero el perfil no existe, el CLI responde `ProjectProfileMissing` y no cae a `qa-dev`.
 
@@ -38,11 +39,11 @@
 ## 5. Bootstrap Examples
 
 ```powershell
-mi-telegram-cli projects bind --root C:\repos\mios\multi-tedi --profile qa-multi-tedi --create-profile --display-name "QA Multi Tedi"
-mi-telegram-cli projects bind --root C:\repos\buho\salud --profile qa-salud --create-profile --display-name "QA Salud"
-mi-telegram-cli auth login --profile qa-multi-tedi
-mi-telegram-cli auth login --profile qa-salud
+mi-telegram-cli projects bind --root C:\repos\mios\multi-tedi --profile qa-multi-tedi
+mi-telegram-cli projects bind --root C:\repos\buho\salud --profile qa-salud
 ```
+
+Los IDs de ejemplo representan perfiles QA previamente creados y autorizados. Si el perfil falta o no está autorizado, el operador del proyecto debe resolverlo; `bind` no crea perfiles ni inicia sesión.
 
 ## 6. Test Traceability
 

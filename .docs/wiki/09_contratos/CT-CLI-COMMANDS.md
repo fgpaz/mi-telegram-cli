@@ -4,11 +4,15 @@
 
 | Comando | Input principal | Output principal |
 | --- | --- | --- |
+| `version` | sin argumentos | JSON estable `{ok:true,data:{version,commit,build_time,go,os,arch,vcs_modified}}` |
+| `--version` | sin argumentos | el mismo JSON que `version` |
+| `doctor` | sin argumentos | JSON local, read-only y redacted con estado de procedencia |
+| `provider-manifest` | sin argumentos | objeto JSON directo `mi-mcp-provider/v2`, namespace `telegram` |
 | `profiles add` | `--profile`, `--display-name` | perfil creado |
 | `profiles list` | `--json` opcional | lista de perfiles |
 | `profiles show` | `--profile` | detalle del perfil |
 | `profiles remove` | `--profile`, `--force` opcional | confirmación de baja |
-| `projects bind` | `--root`, `--profile`, `--create-profile` opcional, `--display-name` opcional | binding `projectRoot -> profileId` |
+| `projects bind` | `--root`, `--profile` | binding `projectRoot -> profileId`; solo perfil QA `qa-*` existente, autorizado y con sesión local |
 | `projects list` | `--json` opcional | lista de bindings |
 | `projects show` | `--root` | binding de un root exacto |
 | `projects current` | cwd actual | binding efectivo o fallback |
@@ -29,6 +33,8 @@
 | `daemon stop` | sin input requerido | daemon detenido |
 | `audit export` | filtros opcionales `--since`, `--profile`, `--operation`, `--errors-only` | eventos JSONL redacted |
 | `audit summary` | filtros opcionales y `--json` | resumen por operación, perfil y proyecto |
+
+La salida del manifiesto es la norma publicada `mi-mcp-provider/v2` de CT-CLI-V1. Cada operación incluye su invocación argv completa, con `fixed_args` literales, `input_mapping.fields` y `output: json`; el manifiesto no activa un helper en el gateway ni concede permisos.
 
 ## 1.1 Flags publicos comunes
 
@@ -82,6 +88,7 @@
 | `FileNotFound` | El path local de `--file` no existe |
 | `UnsupportedMediaType` | La extensión del archivo no está en `{jpg,jpeg,png,webp}` |
 | `ProfileProtected` | `--profile qa-alt` bloqueado para automatización por el guard cross-cutting |
+| `ProfileNotEligibleForBinding` | perfil presente que no es QA, no está autorizado o no tiene sesión local |
 | `ProjectBindingNotFound` | No existe binding para el root solicitado |
 | `ProjectProfileMissing` | El binding efectivo apunta a un perfil inexistente |
 | `TelegramWaitFailed` | Falla esperando updates del peer |
@@ -119,7 +126,7 @@ Notas operativas de shell:
 - Los botones URL devuelven `action=url` y la URL visible, pero el CLI no abre navegador ni WebView.
 - En modo daemon `auto`, los comandos `auth status/logout`, `me`, `dialogs *` y `messages *` esperan en cola por perfil en vez de fallar inmediatamente con `ProfileLocked`.
 - Resolución de perfil: `--profile` explícito gana; si falta, se usa el binding de prefijo más largo de `~/.mi-telegram-cli/projects.json` contra el `cwd`; si no hay binding, fallback legacy `qa-dev`.
-- Bootstrap recomendado para repos concurrentes: `multi-tedi -> qa-multi-tedi` y `salud -> qa-salud`, seguido de `auth login --profile <id>` manual por cada perfil.
+- Bootstrap de bindings: usar solo un perfil `qa-*` ya existente, autorizado y no protegido. `projects bind` no crea perfiles ni inicia sesión; si falta un perfil habilitado, resolverlo con el dueño del proyecto.
 - `MI_TELEGRAM_CLI_DAEMON=off` conserva modo directo y puede devolver `ProfileLocked`; `MI_TELEGRAM_CLI_DAEMON=required` devuelve `DaemonUnavailable` si la coordinación no está disponible.
 - `messages send-photo` valida el archivo local **antes** de tocar Telegram (existencia, no directorio, tamaño 1..10485760 bytes, extensión soportada) y nunca expone el `filePath` original en `data` ni en mensajes de error. La metadata observable es `data.media{kind,mimeType,sizeBytes,sha256,caption?}`.
 - Guard cross-cutting `qa-alt`: el perfil `qa-alt` es estado de usuario real protegido. Los subcomandos modificadores (`auth login`, `auth logout`, `dialogs mark-read`, `messages send`, `messages send-photo`, `messages press-button`) responden `ProfileProtected` cuando reciben `--profile qa-alt`. Las lecturas (`auth status`, `me`, `dialogs list`, `messages read`, `messages wait`) siguen permitidas para inspección humana.

@@ -17,6 +17,9 @@
 
 ## 3. Invariantes tecnicos visibles
 
+- `version` y `--version` emiten el mismo JSON de procedencia (`version`, `commit`, `build_time`, `go`, `os`, `arch`, `vcs_modified`); `doctor` y `provider-manifest` se despachan antes de inicializar storage, daemon o cliente Telegram.
+- `provider-manifest` es `mi-mcp-provider/v2`, namespace `telegram`, con invocación argv completa por operación; publicar el descriptor no registra el consumidor ni concede permisos.
+- `scripts/release.sh` construye el binario Linux amd64 desde `origin/main`, valida la compatibilidad real de gestión/manifiesto y publica el asset versionado.
 - Un comando no reutiliza memoria compartida entre perfiles fuera del storage explícito y la coordinación daemon local.
 - El daemon escucha solo en `127.0.0.1`, usa token local en `daemon/state.json` y no expone admin UI ni endpoints remotos.
 - `MI_TELEGRAM_CLI_DAEMON=off` conserva modo directo con `ProfileLocked`; `auto` asegura daemon y usa cola; `required` falla con `DaemonUnavailable` si no puede usar daemon.

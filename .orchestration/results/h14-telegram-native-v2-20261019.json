@@ -1,0 +1,60 @@
+{
+  "schema": "h14-telegram-native-v2/v1",
+  "objective": "native provider v2 for mi-telegram-cli",
+  "status": "LISTO_SOURCE_ONLY",
+  "global_h14_pass": false,
+  "source": {
+    "repo": "fgpaz/mi-telegram-cli",
+    "module": "mi-telegram-cli",
+    "main_sha": "17bc43dc07d450791e0d723e545a1ed6a99f8c03",
+    "contract": "CT-CLI-V1@ef52b7ddd4a3be0261c811d277c09fc63431e31b",
+    "files": {
+      "cmd/mi-telegram-cli/main.go": "management commands route before Telegram runtime setup",
+      "internal/management/management.go": {
+        "git_blob": "b2b4ed44fac5fe075e774c6e7725801cd5a4689e",
+        "symbols": ["Execute", "currentVersion", "writeManifest", "doctor", "writeError"]
+      },
+      "internal/management/provider-manifest.json": {
+        "git_blob": "c0daa8070fcb6e128a45e126dfc9d6df73bcefba",
+        "format": "mi-mcp-provider/v2",
+        "namespace": "telegram",
+        "binary": "mi-telegram-cli",
+        "operations": 13
+      }
+    },
+    "publication": "Already present on origin/main before this report-only worktree; source not reimplemented or modified"
+  },
+  "installation": {
+    "path": "/home/tesla/.local/bin/mi-telegram-cli",
+    "sha256_from_retained_h16": "952139ed3fee6279352b131ac55309c9b4e19ad2f4bd31273e51eeb864a78f6d",
+    "go_module_path": "mi-telegram-cli/cmd/mi-telegram-cli",
+    "go_vcs_revision": "6813325f45fb692b7fd2ffa7b8c92aec16cbae8e",
+    "vcs_modified": "false",
+    "go_build_id": "Io7vThvSR4NFV_A-TLW3/vz--FzuB4B-q0hQ1MLFj/zD9gUbXpHJlsW0baKViw/LFGF9rVeW58fzD8j4sjd",
+    "matches_source_main": false,
+    "cli_invoked": false
+  },
+  "caller": {
+    "status": "explicit_incomplete",
+    "current_real_use": "not observed",
+    "telegram_gateway_or_private_chat_touched": false
+  },
+  "verification": {
+    "manifest_json_parse": "pass",
+    "manifest_reported_operation_count": 13,
+    "management_cli_probe": false,
+    "tests_or_extra_qa": false,
+    "rebuild_or_install": false
+  },
+  "mi_lsp": {
+    "source_index_exact_find": "zero matches after cross-workspace query; no reindex",
+    "typed_fallback": "Go build metadata and published source paths/symbols"
+  },
+  "mi_decidir": "tool timeout; typed failure, not a gate",
+  "mailbox": "no roster row for current pane; no adopt or send as parent task",
+  "paths_touched": [
+    ".orchestration/results/h14-telegram-native-v2-20261019.md",
+    ".orchestration/results/h14-telegram-native-v2-20261019.json"
+  ],
+  "terminal": "LISTO"
+}

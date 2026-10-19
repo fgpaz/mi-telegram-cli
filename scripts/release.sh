@@ -65,7 +65,9 @@ def check_schema(schema):
     if 'items' in schema:
         check_schema(schema['items'])
     for key in ('oneOf', 'anyOf', 'allOf'):
-        choices = schema.get(key, [])
+        if key not in schema:
+            continue
+        choices = schema[key]
         assert isinstance(choices, list) and choices
         for child in choices:
             check_schema(child)

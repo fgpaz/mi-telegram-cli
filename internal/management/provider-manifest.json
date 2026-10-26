@@ -125,7 +125,7 @@
     },
     {
       "name": "messages send",
-      "description": "Envía un mensaje al peer indicado.",
+      "description": "Mandar mensaje por Telegram. Enviar un mensaje de texto al peer indicado con el perfil QA autorizado. Ejemplos de intención: mandar mensaje por telegram; enviar mensaje a un chat de Telegram. No es el buzón botsd entre sesiones.",
       "effect": "write",
       "contract": "RF-MSG-002",
       "input_schema": {"type": "object", "properties": {"profile": {"type": "string", "minLength": 1}, "peer": {"type": "string", "minLength": 1}, "text": {"type": "string", "minLength": 1}, "json": {"const": true}}, "required": ["peer", "text", "json"], "additionalProperties": false},

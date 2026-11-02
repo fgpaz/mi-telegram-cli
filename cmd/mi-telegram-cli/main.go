@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"time"
@@ -31,6 +32,16 @@ func main() {
 	if err != nil {
 		_, _ = fmt.Fprintf(os.Stderr, "failed to resolve storage root: %v\n", err)
 		os.Exit(1)
+	}
+
+	if argv, err := app.MkeyScopedArgv(baseRoot, os.Args[1:], os.Getenv, exec.LookPath); err != nil {
+		_, _ = fmt.Fprintf(os.Stderr, "failed to resolve mkey refs: %v\n", err)
+		os.Exit(1)
+	} else if len(argv) > 0 {
+		if err := app.Reexec(argv); err != nil {
+			_, _ = fmt.Fprintf(os.Stderr, "failed to exec mkey run-scoped: %v\n", err)
+			os.Exit(1)
+		}
 	}
 
 	store := profile.NewStore(baseRoot, time.Now().UTC)

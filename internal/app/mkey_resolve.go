@@ -2,6 +2,7 @@ package app
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -17,7 +18,7 @@ type mkeyRefs struct {
 	APIHash string `json:"MI_TELEGRAM_API_HASH"`
 }
 
-// MkeyScopedArgv builds `mkey legacy run-scoped ...` when the profile has
+// MkeyScopedArgv builds `mkey legacy run-scoped ...` (no extra "--") when the profile has
 // refs and the process does not already have the API env. A nil argv means
 // the caller should continue as-is.
 func MkeyScopedArgv(baseRoot string, args []string, getenv func(string) string, lookPath func(string) (string, error)) ([]string, error) {
@@ -53,16 +54,29 @@ func MkeyScopedArgv(baseRoot string, args []string, getenv func(string) string, 
 	if err != nil {
 		return nil, err
 	}
+	// mkey 0.1.12 resolves the child on a minimal PATH
+	// (/usr/local/bin:/usr/bin:/bin). A relative name such as
+	// mi-telegram-cli is ScopedChildUnavailable. The child must be absolute.
+	envBin, err := lookPath("env")
+	if err != nil {
+		return nil, err
+	}
+	if !filepath.IsAbs(envBin) {
+		return nil, fmt.Errorf("env is not an absolute path")
+	}
 	exe, err := os.Executable()
 	if err != nil {
 		return nil, err
 	}
+	if !filepath.IsAbs(exe) {
+		return nil, fmt.Errorf("mi-telegram-cli executable is not an absolute path")
+	}
 	argv := []string{
-		mkey, "legacy", "--", "run-scoped", project, env,
+		mkey, "legacy", "run-scoped", project, env,
 		"--names", strings.Join(names, ","),
 		"--path", "/",
 		"--",
-		"env", mkeyChildEnv + "=1",
+		envBin, mkeyChildEnv + "=1",
 		exe,
 	}
 	return append(argv, args...), nil

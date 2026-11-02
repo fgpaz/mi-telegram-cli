@@ -24,8 +24,14 @@ func TestMkeyScopedArgvUsesProfileRefs(t *testing.T) {
 		t.Fatal(err)
 	}
 	joined := strings.Join(argv, " ")
-	if !strings.Contains(joined, "legacy -- run-scoped mi-telegram-cli-qa dev --names MI_TELEGRAM_API_ID,MI_TELEGRAM_API_HASH --path /") {
+	if strings.Contains(joined, "legacy --") {
+		t.Fatalf("mkey 0.1.12 rejects the extra --: %s", joined)
+	}
+	if !strings.Contains(joined, "legacy run-scoped mi-telegram-cli-qa dev --names MI_TELEGRAM_API_ID,MI_TELEGRAM_API_HASH --path /") {
 		t.Fatalf("argv = %s", joined)
+	}
+	if !strings.HasPrefix(joined, "/usr/bin/mkey ") || !strings.Contains(joined, "-- /usr/bin/env ") {
+		t.Fatalf("child must be absolute: %s", joined)
 	}
 	if !strings.Contains(joined, "MI_TELEGRAM_CLI_MKEY_CHILD=1") {
 		t.Fatalf("missing child guard: %s", joined)

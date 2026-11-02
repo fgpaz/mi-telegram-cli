@@ -109,7 +109,7 @@ Operational notes:
 
 - Treat `api_hash` as a secret.
 - Do not commit it to the repo or paste it into shared logs/chat unless strictly necessary.
-- The CLI reads these values from the current shell environment. It does not store the values in the profile. If both are unset and `profiles/<id>/mkey-refs.json` names `project/env/MI_TELEGRAM_API_ID` and `project/env/MI_TELEGRAM_API_HASH`, the process re-execs once under `mkey legacy -- run-scoped` for that scope.
+- The CLI reads these values from the current shell environment. It does not store the values in the profile. If both are unset and `profiles/<id>/mkey-refs.json` names `project/env/MI_TELEGRAM_API_ID` and `project/env/MI_TELEGRAM_API_HASH`, the process re-execs once under `mkey legacy run-scoped` for that scope. The child is an absolute path (`/usr/bin/env` plus the CLI binary). A relative command name is `ScopedChildUnavailable` because the scope uses a minimal PATH.
 
 Example bootstrap:
 

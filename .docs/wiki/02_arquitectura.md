@@ -43,7 +43,7 @@ flowchart LR
 | Daemon local coordinador | Proceso local headless | Auto-start para comandos Telegram, cola FIFO por perfil, lease de login y auditoría JSONL. |
 | Auditoría JSONL | Persistencia operativa local | Guarda eventos diarios redacted y summaries de latencia/errores. |
 | Adaptador Telegram | Integración | Traduce operaciones del CLI a llamadas MTProto vía `gotd/td`. |
-| Refs mkey del perfil | Config local `profiles/<id>/mkey-refs.json` | Si faltan `MI_TELEGRAM_API_ID` y `MI_TELEGRAM_API_HASH`, el binario se reejecuta con `mkey legacy -- run-scoped` sobre el proyecto y el env nombrados en esas refs. No guarda ni imprime valores. |
+| Refs mkey del perfil | Config local `profiles/<id>/mkey-refs.json` | Si faltan `MI_TELEGRAM_API_ID` y `MI_TELEGRAM_API_HASH`, el binario se reejecuta con `mkey legacy run-scoped` (mkey 0.1.12 no acepta `--` entre `legacy` y `run-scoped`) sobre el proyecto y el env nombrados en esas refs. El hijo es la ruta absoluta de `env` más la ruta absoluta del propio binario: el PATH mínimo del scope no incluye `~/.local/bin`, y un nombre relativo devuelve `ScopedChildUnavailable`. No guarda ni imprime valores. |
 | Skill de agente | Integración local | Invoca el CLI desde shell y adapta su salida al flujo de Codex/Claude. |
 | Telegram | Servicio externo | Autenticación, diálogos, recepción y entrega de mensajes. |
 

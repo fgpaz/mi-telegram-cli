@@ -1,6 +1,7 @@
 # Gobierno documental
 
 ```yaml
+babel_project: 81d4584c-bb8f-4c05-ab5d-b788a895a727
 doc_id: DOC-GOV-MI-TELEGRAM-CLI
 profile: spec_backend
 governance_profile: spec_backend
